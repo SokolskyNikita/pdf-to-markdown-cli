@@ -1,6 +1,6 @@
 # PDF -> Markdown CLI utility
 
-Convenience CLI wrapper around the [Marker API](https://datalab.to/marker) which is currently the best-in-class for PDF->Markdown conversion. See the **/examples** folder for conversion examples.
+Convenience CLI wrapper around the [Marker API](https://datalab.to/marker) which is currently the best-in-class for PDF->Markdown conversion. See the **/examples** folder for conversion examples. Note that Github's Markdown renderer doesn't have full support for inline math equations, so view them locally for a proper comparison.
 
 ### Features 
   - Supported **inputs**: PDF, Word (.doc, .docx), PowerPoint (.ppt, .pptx), Images (.png, .jpg, .jpeg, .webp, .gif, .tiff)
@@ -46,11 +46,6 @@ python marker_cli.py input_dir/ # directory of files
 
 #### Available Options
 
-- `--max`
-  - Enable all OCR enhancements: ignores existing OCR and uses LLM for all text, equations, and tables
-  - Maximum accuracy at double the cost
-  - **Strongly recommended for best results**
-
 - `--strip`
   - Remove and redo OCR on the document
   - Useful for files with poor quality existing OCR
@@ -60,10 +55,14 @@ python marker_cli.py input_dir/ # directory of files
   - Ignores existing PDF text
   - Slower but more accurate for problematic PDFs
 
-  - `--llm`
+- `--llm`
   - Enable LLM enhancement for better accuracy
   - Improves forms, tables, inline math, and layout recognition
   - Note: Doubles the per-request cost
+
+- `--max`
+  - Enable all OCR enhancements: ignores existing OCR and uses LLM for all text, equations, and tables
+  - Likewise doubles the per-request cost
 
 - `--noimg`
   - Disable image extraction
