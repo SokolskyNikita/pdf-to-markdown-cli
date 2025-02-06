@@ -1,26 +1,18 @@
-# Marker PDF to Markdown Converter
+# PDF -> Markdown CLI utility
 
-A command-line tool that converts PDF documents to Markdown or JSON format using the Marker API. This tool provides comprehensive document conversion capabilities including OCR, image extraction, and layout analysis.
+Convenience CLI wrapper around the [Marker API](https://datalab.to/marker) which is currently the best-in-class for PDF->Markdown conversion. See the **/examples** folder for conversion examples.
 
-### Features & Capabilities of Marker's API
-
-- **Document Conversion**
-  - Convert PDFs, Word documents, and PowerPoints to Markdown/JSON/HTML
-  - Support for multiple OCR languages
-  - Intelligent image extraction and handling
+### Features 
+  - Supported **inputs**: PDF, Word (.doc, .docx), PowerPoint (.ppt, .pptx), Images (.png, .jpg, .jpeg, .webp, .gif, .tiff)
+  - Supported **outputs**: Markdown and JSON
+  - Automatically splits large PDFs into smaller files for processing, speeds up processing up to 10x
+  - Can OCR in ~any language that's supported by modern LLMs
   - Automatic file name cleaning and organization
   - Optional LLM enhancement for improved accuracy, including table structure recognition
-  - Great support for inline math equations
-  - Stores a cache of requests, lets you retrieve a requested file later if you accidentally close the terminal
+  - Excellent support for inline math equations
+  - Stores the requests status in a local cache file, lets you resume interrupted conversions
 
-### Supported File Types
-
-- PDF (`.pdf`)
-- Word Documents (`.doc`, `.docx`)
-- PowerPoint (`.ppt`, `.pptx`)
-- Images (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tiff`)
-
-### Installation & Setup
+### Installation & Usage
 
 1. Clone and navigate to the repository:
 ```bash
@@ -47,9 +39,9 @@ pip install -r requirements.txt
 
 ### Usage
 
-Basic conversion:
 ```bash
-python marker_cli.py input.pdf
+python marker_cli.py input.pdf # single file
+python marker_cli.py input_dir/ # directory of files
 ```
 
 #### Available Options
@@ -68,14 +60,14 @@ python marker_cli.py input.pdf
   - Ignores existing PDF text
   - Slower but more accurate for problematic PDFs
 
-- `--noimg`
-  - Disable image extraction
-  - When used with `--llm`, converts images to text descriptions
-
-- `--llm`
+  - `--llm`
   - Enable LLM enhancement for better accuracy
   - Improves forms, tables, inline math, and layout recognition
   - Note: Doubles the per-request cost
+
+- `--noimg`
+  - Disable image extraction
+  - When used with `--llm`, converts images to text descriptions
 
 - `--json`
   - Output in JSON format instead of Markdown
@@ -84,6 +76,16 @@ python marker_cli.py input.pdf
   - Add page delimiters to output
   - Helps maintain document structure
 
+- `--no-chunk`
+  - Disable PDF chunking (processes entire PDF as one file)
+  - Useful for small PDFs or when you want to ensure document coherence
+  - Note: May be slower for large files
+
+- `-cs`, `--chunk-size PAGES`
+  - Set custom chunk size in pages (default: 25)
+  - Larger chunks mean fewer API requests but slower individual processing
+  - Example: `-cs 50` processes 50 pages per chunk
+
 - `--outdir PATH`
   - Default: `converted/<filename>/<timestamp>/`
 
@@ -91,7 +93,7 @@ python marker_cli.py input.pdf
   - Comma-separated list of languages to use for OCR, useful for mixed language documents
   - Example: "English,French"
 
-#### Usage Examples
+#### More Usage Examples
 
 Process with specific languages:
 ```bash
@@ -108,6 +110,18 @@ JSON output with image extraction disabled:
 python marker_cli.py document.pdf --json --noimg
 ```
 
+Process large PDF without chunking:
+```bash
+python marker_cli.py document.pdf --no-chunk
+```
+
+Process with custom chunk size of 50 pages:
+```bash
+python marker_cli.py document.pdf --chunk-size 50
+# or
+python marker_cli.py document.pdf -cs 50
+```
+
 ### Output Structure
 
 Converted files are organized as follows, the subfolders are created to avoid overwriting previous conversions:
@@ -122,11 +136,9 @@ converted/
 
 ### Troubleshooting
 
-- If output quality is poor, try enabling `--force` OCR
+- If output quality is poor, try enabling `--force` to ignore existing OCR inside the PDF
 - Ensure correct language settings with `--langs`
-- When using `--llm` and/or `--max`, expect 100 pages to takes 7-10 minutes to process
-- Files over 200MB are not supported (TODO: implement this)
-- Failed conversions should show detailed error messages
+- Failed conversions should show detailed error messages, open an issue on the repo if you think it's an error with the tool
 
 ### License
 

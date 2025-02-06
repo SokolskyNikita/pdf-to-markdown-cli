@@ -3,3 +3,7 @@ pdfs/
 .marker_cache/
 __pycache__/
 .DS_Store
+.vscode/
+chunks/
+*.pdf
+*.out
