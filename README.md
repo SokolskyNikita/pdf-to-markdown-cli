@@ -8,7 +8,7 @@ Convenience CLI wrapper around the [Marker API](https://datalab.to/marker) which
   - Automatically splits large PDFs into smaller files for processing, speeds up processing up to 10x
   - Can OCR in ~any language that's supported by modern LLMs
   - Automatic file name cleaning and organization
-  - Optional LLM enhancement for improved accuracy, including table structure recognition
+  - Optional --llm flag can sometimes improve accuracy, especially for tables and inline math
   - Excellent support for inline math equations
   - Stores the requests status in a local cache file, lets you resume interrupted conversions
 
