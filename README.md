@@ -1,144 +1,136 @@
-# PDF -> Markdown CLI utility
+# PDF to Markdown CLI (via the Datalab Marker API)
 
-Convenience CLI wrapper around the [Marker API](https://datalab.to/marker) which is currently the best-in-class for PDF->Markdown conversion. See the **/examples** folder for conversion examples. Note that Github's Markdown renderer doesn't have full support for inline math equations, so view them locally for a proper comparison.
+Convert PDF files (and other documents) to Markdown using the [Marker API](https://www.datalab.to/marker) via a convenient CLI tool.
 
-### Features 
-  - Supported **inputs**: PDF, Word (.doc, .docx), PowerPoint (.ppt, .pptx), Images (.png, .jpg, .jpeg, .webp, .gif, .tiff)
-  - Supported **outputs**: Markdown and JSON
-  - Automatically splits large PDFs into smaller files for processing, speeds up processing up to 10x
-  - Can OCR in ~any language that's supported by modern LLMs
-  - Automatic file name cleaning and organization
-  - Optional --llm flag can sometimes improve accuracy, especially for tables and inline math
-  - Excellent support for inline math equations
-  - Stores the requests status in a local cache file, lets you resume interrupted conversions
+## Overview
 
-### Installation & Usage
+This package provides a convenient command-line interface (`pdf-to-md`) for converting PDF files (and other document formats like Word, EPUB, images, etc.) to markdown. It leverages the Marker API for high-quality PDF conversion and handles chunking, parallel processing, and result combination.
 
-1. Clone and navigate to the repository:
-```bash
-git clone <repository-url>
-cd marker_pdf_to_md
-```
+## Features
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+- Convert PDFs, Word documents, PowerPoint files, spreadsheets, epub, HTML, and images to Markdown using the best-in-class Marker API by Datalab
+- Handle large documents by splitting them into chunks, which massively speeds up output speed
+- Progress tracking for long-running operations
+- Customizable OCR options, fully reflecting Marker's API as of April 2025
+- Local caching of in-progress conversions, allowing for idempotence
+- Output in Markdown, JSON, or HTML format
 
-3. Set up your API key:
-   - Get your API key from [datalab.to](https://www.datalab.to/app/keys)
-   - Set the environment variable `MARKER_PDF_KEY`:
-     ```bash
-     export MARKER_PDF_KEY=your_api_key_here
-     ```
-   - For permanent setup, add to your shell configuration file (e.g., `.bashrc` or `.zshrc`):
-     ```bash
-     echo 'export MARKER_PDF_KEY=your_api_key_here' >> ~/.zshrc
-     source ~/.zshrc
-     ```
+## Installation
 
-### Usage
+### From PyPI
 
 ```bash
-python marker_cli.py input.pdf # single file
-python marker_cli.py input_dir/ # directory of files
+pip install pdf-to-markdown-cli
 ```
 
-#### Available Options
+### From source
 
-- `--strip`
-  - Remove and redo OCR on the document
-  - Useful for files with poor quality existing OCR
-
-- `--force`
-  - Force OCR on every page
-  - Ignores existing PDF text
-  - Slower but more accurate for problematic PDFs
-
-- `--llm`
-  - Enable LLM enhancement for better accuracy
-  - Improves forms, tables, inline math, and layout recognition
-  - Note: Doubles the per-request cost
-
-- `--max`
-  - Enable all OCR enhancements: ignores existing OCR and uses LLM for all text, equations, and tables
-  - Likewise doubles the per-request cost
-
-- `--noimg`
-  - Disable image extraction
-  - When used with `--llm`, converts images to text descriptions
-
-- `--json`
-  - Output in JSON format instead of Markdown
-
-- `--pages`
-  - Add page delimiters to output
-  - Helps maintain document structure
-
-- `--no-chunk`
-  - Disable PDF chunking (processes entire PDF as one file)
-  - Useful for small PDFs or when you want to ensure document coherence
-  - Note: May be slower for large files
-
-- `-cs`, `--chunk-size PAGES`
-  - Set custom chunk size in pages (default: 25)
-  - Larger chunks mean fewer API requests but slower individual processing
-  - Example: `-cs 50` processes 50 pages per chunk
-
-- `--outdir PATH`
-  - Default: `converted/<filename>/<timestamp>/`
-
-- `--langs LANGUAGES`
-  - Comma-separated list of languages to use for OCR, useful for mixed language documents
-  - Example: "English,French"
-
-#### More Usage Examples
-
-Process with specific languages:
 ```bash
-python marker_cli.py document.pdf --langs "English,French"
+git clone https://github.com/SokolskyNikita/pdf-to-markdown-cli.git 
+cd pdf-to-markdown-cli
+pip install -e .
 ```
 
-Maximum quality conversion:
+## Usage
+
+### Command-line interface
+
 ```bash
-python marker_cli.py document.pdf --max
+# Obtain an API key by signing up on https://www.datalab.to/marker
+export MARKER_PDF_KEY=your_api_key_here
+
+# Basic usage
+pdf-to-md /path/to/file.pdf
+
+# Process all files in a directory
+pdf-to-md /path/to/directory
+
+# Output in JSON format
+pdf-to-md /path/to/file.pdf --json
+
+# Use additional languages for OCR
+pdf-to-md /path/to/file.pdf --langs "English,French,German"
+
+# Use all Marker OCR enhancements
+pdf-to-md /path/to/file.pdf --max
 ```
 
-JSON output with image extraction disabled:
+### Full list of CLI options
+
+- `input`: Input file or directory path
+- `--json`: Output in JSON format (default is markdown)
+- `--langs`: Comma-separated OCR languages (default: "English")
+- `--llm`: Use LLM for enhanced processing
+- `--strip`: Redo OCR processing
+- `--noimg`: Disable image extraction
+- `--force`: Force OCR on all pages
+- `--pages`: Add page delimiters
+- `--max`: Enable all OCR enhancements (equivalent to --llm --strip --force)
+- `--max-pages`: Maximum number of pages to process from the start of the file
+- `--no-chunk`: Disable PDF chunking
+- `--chunk-size`: Set PDF chunk size in pages (default: 25)
+- `--output-dir`: Output directory (default: "converted")
+- `--cache-dir`: Cache directory (default: ".marker_cache")
+
+### API
+
+```python
+# Internal module paths remain the same
+from docs_to_md.config.settings import Config
+from docs_to_md.core.processor import MarkerProcessor
+
+# Create configuration
+config = Config(
+    api_key="your_api_key_here",
+    input_path="/path/to/file.pdf",
+    output_format="markdown",
+    use_llm=True
+)
+
+# Create processor and run
+processor = MarkerProcessor(config)
+processor.process()
+```
+
+## Project Structure
+
+The package is organized as follows:
+
+```
+pdf-to-markdown-cli/ (Project Root)
+├── docs_to_md/      (Python Package Source)
+│   ├── api/
+│   ├── config/
+│   ├── core/
+│   ├── pdf/
+│   ├── storage/
+│   └── utils/
+├── setup.py
+├── README.md
+└── ... (other config files)
+```
+
+## Requirements
+
+- Python 3.10 or higher
+- Runtime dependencies are listed in `setup.py` and automatically installed via pip.
+- The `requirements.txt` file lists exact versions used for development and testing, and can be used to set up a development environment: `pip install -r requirements.txt`
+
+## Development
+
+To run the code directly from the source tree without installation:
+
 ```bash
-python marker_cli.py document.pdf --json --noimg
+# Using the installed entry point (requires editable install):
+# pip install -e .
+# pdf-to-md /path/to/file.pdf
+
+# Or running the module directly:
+python -m docs_to_md /path/to/file.pdf 
 ```
 
-Process large PDF without chunking:
-```bash
-python marker_cli.py document.pdf --no-chunk
-```
+For regular use after installation, use the `pdf-to-md` command.
 
-Process with custom chunk size of 50 pages:
-```bash
-python marker_cli.py document.pdf --chunk-size 50
-# or
-python marker_cli.py document.pdf -cs 50
-```
+## License
 
-### Output Structure
-
-Converted files are organized as follows, the subfolders are created to avoid overwriting previous conversions:
-```
-converted/
-└── document_name/
-    └── YY-MM-DD_HH-MM/
-        ├── document.md
-        └── images/
-            └── extracted_images...
-```
-
-### Troubleshooting
-
-- If output quality is poor, try enabling `--force` to ignore existing OCR inside the PDF
-- Ensure correct language settings with `--langs`
-- Failed conversions should show detailed error messages, open an issue on the repo if you think it's an error with the tool
-
-### License
-
-MIT License
+This project is licensed under the MIT License - see the LICENSE file for details.

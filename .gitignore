@@ -1,9 +1,42 @@
 converted/
 pdfs/
-.marker_cache/
+# Cache directory
+.docs_to_md_cache/
+# Old cache dir, can be removed if no longer generated
+# .marker_cache/
 __pycache__/
+*.pyc
+
+# OS generated files
 .DS_Store
+Thumbs.db
+
+# IDE / Editor files
 .vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+*.egg-info
+*.egg
+wheels/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+*.env
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary/Output files (keep existing)
 chunks/
 *.pdf
 *.out

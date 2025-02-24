@@ -40,7 +40,7 @@ All endpoints will return immediately, and continue processing in the background
 
 ## Marker
 
-The marker endpoint converts PDF, word documents, and powerpoints to markdown. It is available at `/api/v1/marker`.
+The marker endpoint converts PDFs, spreadsheets, word documents, epub, HTML, and powerpoints to markdown. It is available at `/api/v1/marker`.
 
 Here is an example request in Python:
 
@@ -56,7 +56,8 @@ form_data = {
     'output_format': (None, 'markdown'),
     "use_llm": (None, False),
     "strip_existing_ocr": (None, False),
-    "disable_image_extraction": (None, False)
+    "disable_image_extraction": (None, False),
+    "max_pages": (None, 10)
 }
 
 headers = {"X-Api-Key": "YOUR_API_KEY"}
@@ -66,7 +67,7 @@ data = response.json()`
 
 As you can see, everything is a form parameter. This is because we're uploading a file, so the request body has to be `multipart/form-data`.
 
-Parameters: - `file`, the input file. - `langs` is an optional, comma-separated list of languages in the file (this is used if OCR is needed). The language names and codes are from [here](https://github.com/VikParuchuri/surya/blob/master/surya/languages.py). - `output_format` - one of `json`, `html`, or `markdown`. - `force_ocr` will force OCR on every page (ignore the text in the PDF). This is slower, but can be useful for PDFs with known bad text. - `paginate` - adds delimiters to the output pages. See the API reference for details. - `use_llm` - Beta: setting this to `True` will use an LLM to enhance accuracy of forms, tables, inline math, and layout. It's much more accurate, but will double the per-request cost. - `strip_existing_ocr` - setting to `True` will remove all existing OCR text from the file and redo OCR. This is useful if you know OCR text was added to the PDF by a low-quality OCR tool. - `disable_image_extraction` - setting to `True` will disable extraction of images. If `use_llm` is set to `True`, this will also turn images into text descriptions.
+Parameters: - `file`, the input file. - `langs` is an optional, comma-separated list of languages in the file (this is used if OCR is needed). The language names and codes are from [here](https://github.com/VikParuchuri/surya/blob/master/surya/languages.py). - `output_format` - one of `json`, `html`, or `markdown`. - `force_ocr` will force OCR on every page (ignore the text in the PDF). This is slower, but can be useful for PDFs with known bad text. - `paginate` - adds delimiters to the output pages. See the API reference for details. - `use_llm` - setting this to `True` will use an LLM to enhance accuracy of forms, tables, inline math, and layout. It can be much more accurate, but carries a small hallucination risk. Setting `use_llm` to `True` will make responses slower. - `strip_existing_ocr` - setting to `True` will remove all existing OCR text from the file and redo OCR. This is useful if you know OCR text was added to the PDF by a low-quality OCR tool. - `disable_image_extraction` - setting to `True` will disable extraction of images. If `use_llm` is set to `True`, this will also turn images into text descriptions. - `max_pages` - from the start of the file, specifies the maximum number of pages to inference.
 
 You can see a full list of parameters and descriptions in the [API reference](https://www.datalab.to/app/reference).
 
@@ -122,8 +123,11 @@ All response data will be deleted from datalab servers an hour after the process
 Marker supports the following extensions and mime types:
 
 -   PDF - `pdf`/`application/pdf`
--   Word document - `doc`/`application/msword`, `docx`/`application/vnd.openxmlformats-officedocument.wordprocessingml.document`
--   Powerpoint - `ppt`/`application/vnd.ms-powerpoint`, `pptx`/`application/vnd.openxmlformats-officedocument.presentationml.presentation`
+-   Spreadsheet - `xls`/`application/vnd.ms-excel`, `xlsx`/`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `ods`/`application/vnd.oasis.opendocument.spreadsheet`
+-   Word document - `doc`/`application/msword`, `docx`/`application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `odt`/`application/vnd.oasis.opendocument.text`
+-   Powerpoint - `ppt`/`application/vnd.ms-powerpoint`, `pptx`/`application/vnd.openxmlformats-officedocument.presentationml.presentation`, `odp`/`application/vnd.oasis.opendocument.presentation`
+-   HTML - `html`/`text/html`
+-   Epub - `epub`/`application/epub+zip`
 -   Images - `png`/`image/png`, `jpeg`/`image/jpeg`, `wepb`/`image/webp`, `gif`/`image/gif`, `tiff`/`image/tiff`, `jpg`/`image/jpg`
 
 You can automatically find the mimetype in python by installing `filetype`, then using `filetype.guess(FILEPATH).mime`.
@@ -160,7 +164,7 @@ Optional parameters are:
 -   `detect_cell_boxes` will re-detect all cell bounding boxes vs using the text in the PDF.
 -   `output_format` is the format of the output, one of `markdown`, `html`, `json`. Default is `markdown`.
 -   `paginate` determines whether to paginate markdown output. Default is `False`.
--   `use_llm` beta: optionally uses an LLM to merge tables and improve accuracy. This will double the cost of requests.
+-   `use_llm` optionally uses an LLM to merge tables and improve accuracy. This can be much more accurate, but has a small hallucination risk. It also doubles the per-page cost. Setting `use_llm` to `True` will make responses slower.
 
 The request will return the following:
 
@@ -209,14 +213,7 @@ All response data will be deleted from datalab servers an hour after the process
 
 ### Supported file types
 
-Table recognition supports the following extensions and mime types:
-
--   PDF - `pdf`/`application/pdf`
--   Word document - `doc`/`application/msword`, `docx`/`application/vnd.openxmlformats-officedocument.wordprocessingml.document`
--   Powerpoint - `ppt`/`application/vnd.ms-powerpoint`, `pptx`/`application/vnd.openxmlformats-officedocument.presentationml.presentation`
--   Images - `png`/`image/png`, `jpeg`/`image/jpeg`, `wepb`/`image/webp`, `gif`/`image/gif`, `tiff`/`image/tiff`, `jpg`/`image/jpg`
-
-You can automatically find the mimetype in python by installing `filetype`, then using `filetype.guess(FILEPATH).mime`.
+Table recognition supports the same extensions and mime types as marker (listed above).
 
 ## OCR
 
@@ -305,14 +302,7 @@ All response data will be deleted from datalab servers an hour after the process
 
 ### Supported file types
 
-OCR supports the following extensions and mime types:
-
--   PDF - `pdf`/`application/pdf`
--   Word document - `doc`/`application/msword`, `docx`/`application/vnd.openxmlformats-officedocument.wordprocessingml.document`
--   Powerpoint - `ppt`/`application/vnd.ms-powerpoint`, `pptx`/`application/vnd.openxmlformats-officedocument.presentationml.presentation`
--   Images - `png`/`image/png`, `jpeg`/`image/jpeg`, `wepb`/`image/webp`, `gif`/`image/gif`, `tiff`/`image/tiff`, `jpg`/`image/jpg`
-
-You can automatically find the mimetype in python by installing `filetype`, then using `filetype.guess(FILEPATH).mime`.
+OCR supports the same extensions and mime types as marker (listed above).
 
 ## Layout
 
@@ -396,11 +386,6 @@ All response data will be deleted from datalab servers an hour after the process
 
 ### Supported file types
 
-Layout supports the following extensions and mime types:
-
--   PDF - `pdf`/`application/pdf`
--   Word document - `doc`/`application/msword`, `docx`/`application/vnd.openxmlformats-officedocument.wordprocessingml.document`
--   Powerpoint - `ppt`/`application/vnd.ms-powerpoint`, `pptx`/`application/vnd.openxmlformats-officedocument.presentationml.presentation`
--   Images - `png`/`image/png`, `jpeg`/`image/jpeg`, `wepb`/`image/webp`, `gif`/`image/gif`, `tiff`/`image/tiff`, `jpg`/`image/jpg`
+Layout supports the same extensions and mime types as marker (listed above).
 
 You can automatically find the mimetype in python by installing `filetype`, then using `filetype.guess(FILEPATH).mime`.

@@ -1,18 +1,17 @@
-import logging
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
-from diskcache import Cache
 from pydantic import BaseModel
 
 
 class Status(str, Enum):
     """Status of a request or chunk."""
-    PENDING = "pending" # Waiting to be processed by the API
-    PROCESSING = "processing" # Currently being processed by the API
-    COMPLETE = "complete" # Successfully processed by the API
-    FAILED = "failed" # Failed to process by the API
+    PENDING = "pending"  # Waiting to be processed by the API
+    PROCESSING = "processing"  # Currently being processed by the API
+    COMPLETE = "complete"  # Successfully processed by the API
+    FAILED = "failed"  # Failed to process by the API
+
 
 class ChunkInfo(BaseModel):
     """Information about a chunk or original file being processed."""
@@ -40,6 +39,7 @@ class ChunkInfo(BaseModel):
         """Get the path where the result should be stored."""
         return tmp_dir / f"{Path(self.path).name}.out"
 
+
 class ConversionRequest(BaseModel):
     """Tracks a conversion request and its state."""
     request_id: str
@@ -53,6 +53,7 @@ class ConversionRequest(BaseModel):
     tmp_dir: Optional[Path] = None  # Directory for temporary files for this conversion
 
     def set_status(self, status: Status, error: Optional[str] = None) -> None:
+        """Set status and optional error message."""
         self.status = status
         if error:
             self.error = error
@@ -81,53 +82,4 @@ class ConversionRequest(BaseModel):
     @property
     def all_complete(self) -> bool:
         """Check if all chunks are complete."""
-        return all(c.status == Status.COMPLETE for c in self.chunks)
-
-class CacheManager:
-    """Handles persistence of conversion requests."""
-
-    def __init__(self, cache_dir: str):
-        """Initialize cache manager with given directory."""
-        try:
-            self.cache: Cache = Cache(cache_dir)
-        except Exception as e:
-            logging.error(f"Failed to initialize cache in {cache_dir}: {e}")
-            raise
-
-    def save(self, request: ConversionRequest) -> None:
-        """Save request to cache."""
-        try:
-            self.cache.set(request.request_id, request.model_dump())
-        except Exception as e:
-            logging.error(f"Failed to save request {request.request_id}: {e}")
-            raise
-
-    def get(self, request_id: str) -> Optional[ConversionRequest]:
-        """Get request from cache."""
-        try:
-            data = self.cache.get(request_id)
-            if data:
-                return ConversionRequest.model_validate(data)
-            return None
-        except Exception as e:
-            logging.error(f"Failed to get request {request_id}: {e}")
-            return None
-
-    def delete(self, request_id: str) -> bool:
-        """Delete request from cache. Returns True if successful."""
-        try:
-            return bool(self.cache.delete(request_id))
-        except Exception as e:
-            logging.error(f"Failed to delete request {request_id}: {e}")
-            return False
-
-    def get_all(self) -> List[ConversionRequest]:
-        """Get all requests from cache."""
-        results = []
-        for key in self.cache.iterkeys():
-            if request := self.get(str(key)):
-                results.append(request)
-        return results
-
-    def close(self) -> None:
-        self.cache.close()
+        return all(c.status == Status.COMPLETE for c in self.chunks) 
