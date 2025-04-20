@@ -66,11 +66,19 @@ pdf-to-md /path/to/file.pdf --max
 - `--force`: Force OCR on all pages
 - `--pages`: Add page delimiters
 - `--max`: Enable all OCR enhancements (equivalent to --llm --strip --force)
-- `--max-pages`: Maximum number of pages to process from the start of the file
+- `-mp`, `--max-pages`: Maximum number of pages to process from the start of the file
 - `--no-chunk`: Disable PDF chunking
-- `--chunk-size`: Set PDF chunk size in pages (default: 25)
-- `--output-dir`: Output directory (default: "converted")
-- `--cache-dir`: Cache directory (default: ".marker_cache")
+- `-cs`, `--chunk-size`: Set PDF chunk size in pages (default: 25)
+- `-o`, `--output-dir`: Absolute path to the output directory. If not provided, output files will be saved in the same directory as their corresponding input files.
+- `-v`, `--verbose`: Enable verbose (DEBUG level) logging
+
+### Output Structure
+
+By default, output files are saved in the same directory as the input file with the format `[input-filename].[format]`. For example, converting `/data/report.pdf` to markdown will result in `/data/report.md`.
+
+If an output file with the same name already exists, the new file will be automatically renamed using a numeric suffix (e.g., `[input-filename]_1.[format]`, `[input-filename]_2.[format]`, etc.) to avoid overwriting.
+
+If you specify `--output-dir /path/to/output`, the output file will be placed in that directory (e.g., `/path/to/output/report.md`). The same automatic renaming logic applies if a file with the same name exists in the target directory.
 
 ### API
 
@@ -134,3 +142,7 @@ For regular use after installation, use the `pdf-to-md` command.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Future Considerations
+
+While this project currently uses a modern structure (`pyproject.toml`, `src` layout), future development might involve migrating to a standardized project template, such as [simonw/python-lib](https://github.com/simonw/python-lib), to further align with community best practices and potentially simplify workflows like automated PyPI publishing via Trusted Publishers.

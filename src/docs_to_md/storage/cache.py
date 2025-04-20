@@ -1,7 +1,7 @@
 import logging
 import threading
-from pathlib import Path
 from typing import List, Optional
+from pathlib import Path
 
 from diskcache import Cache
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class CacheManager:
     """Handles persistence of conversion requests."""
 
-    def __init__(self, cache_dir: str):
+    def __init__(self, cache_dir: Path):
         """
         Initialize cache manager with given directory.
         

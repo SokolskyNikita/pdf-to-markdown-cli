@@ -1,9 +1,6 @@
 converted/
 pdfs/
-# Cache directory
-.docs_to_md_cache/
-# Old cache dir, can be removed if no longer generated
-# .marker_cache/
+
 __pycache__/
 *.pyc
 
@@ -38,5 +35,4 @@ htmlcov/
 
 # Temporary/Output files (keep existing)
 chunks/
-*.pdf
 *.out

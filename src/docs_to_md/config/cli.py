@@ -1,61 +1,57 @@
 import argparse
-from pathlib import Path
+from pathlib import Path    
+import os
+from typing import Optional
+import importlib.metadata
 
 from docs_to_md.config.settings import Config
-from docs_to_md.utils.exceptions import ConfigurationError
-from docs_to_md.utils.file_utils import get_env_var
+from docs_to_md.utils.exceptions import ConfigurationError, FileError
 
 
 def parse_args() -> argparse.Namespace:
-    """
-    Parse command line arguments.
-    
-    Returns:
-        Parsed arguments namespace
-    """
+    # Get package version dynamically
+    try:
+        __version__ = importlib.metadata.version('pdf-to-markdown-cli')
+    except importlib.metadata.PackageNotFoundError:
+        __version__ = 'unknown' # Fallback if package not installed
+        
     parser = argparse.ArgumentParser(
         description="Process PDF files using Marker API.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
-    # Required arguments
+    # Add version argument
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'pdf-to-markdown-cli version: {__version__}'
+    )
+    
     parser.add_argument("input", help="Input file or directory path")
     
-    # Output format
     parser.add_argument("--json", action="store_true", help="Output in JSON format")
     
-    # OCR settings
-    parser.add_argument("--langs", default="English", help="Comma-separated OCR languages")
+    parser.add_argument("-l", "--langs", default="English", help="Comma-separated OCR languages")
     parser.add_argument("--llm", action="store_true", help="Use LLM for enhanced processing")
     parser.add_argument("--strip", action="store_true", help="Redo OCR processing")
     parser.add_argument("--noimg", action="store_true", help="Disable image extraction")
     parser.add_argument("--force", action="store_true", help="Force OCR on all pages")
     parser.add_argument("--pages", action="store_true", help="Add page delimiters")
-    parser.add_argument("--max-pages", type=int, help="Maximum number of pages to process from the start of the file")
+    parser.add_argument("-mp", "--max-pages", type=int, help="Maximum number of pages to process from the start of the file")
     
-    # Advanced settings
     parser.add_argument("--max", action="store_true", help="Enable all OCR enhancements (LLM, strip OCR, force OCR)")
     parser.add_argument("--no-chunk", action="store_true", help="Disable PDF chunking (sets chunk size to 1 million)")
     parser.add_argument("-cs", "--chunk-size", type=int, help="Set PDF chunk size in pages", default=25)
-    parser.add_argument("--output-dir", help="Output directory", default="converted")
-    parser.add_argument("--cache-dir", help="Cache directory", default=".docs_to_md_cache")
+    parser.add_argument("-o", "--output-dir", help="Absolute path to the output directory (default: same directory as input file)", default=None)
+
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose (DEBUG level) logging")
     
     return parser.parse_args()
 
 
 def create_config_from_args() -> Config:
-    """
-    Create configuration from command line arguments.
-    
-    Returns:
-        Config object with settings from command line
-        
-    Raises:
-        ConfigurationError: If required arguments are missing
-    """
     args = parse_args()
     
-    # Get API key from environment
     try:
         api_key = get_env_var("MARKER_PDF_KEY")
     except Exception as e:
@@ -67,8 +63,7 @@ def create_config_from_args() -> Config:
     config = Config(
         api_key=api_key,
         input_path=args.input,
-        output_dir=Path(args.output_dir),
-        cache_dir=Path(args.cache_dir),
+        output_dir=Path(args.output_dir) if args.output_dir else None,
         output_format="json" if args.json else "markdown",
         langs=args.langs,
         use_llm=args.llm or args.max,
@@ -80,7 +75,13 @@ def create_config_from_args() -> Config:
         max_pages=args.max_pages
     )
     
-    # Validate the configuration
     config.validate()
     
     return config 
+
+def get_env_var(name: str, required: bool = True) -> Optional[str]:
+    """Get environment variable with optional requirement."""
+    value = os.getenv(name)
+    if required and not value:
+        raise FileError(f"Required environment variable {name} is not set")
+    return value

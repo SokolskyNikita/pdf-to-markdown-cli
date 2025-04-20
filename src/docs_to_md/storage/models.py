@@ -1,8 +1,8 @@
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
-
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import time
 
 
 class Status(str, Enum):
@@ -51,6 +51,9 @@ class ConversionRequest(BaseModel):
     chunks: List[ChunkInfo] = []
     chunk_size: int
     tmp_dir: Optional[Path] = None  # Directory for temporary files for this conversion
+    images_dir: Optional[Path] = None  # Added to store determined image path
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
 
     def set_status(self, status: Status, error: Optional[str] = None) -> None:
         """Set status and optional error message."""

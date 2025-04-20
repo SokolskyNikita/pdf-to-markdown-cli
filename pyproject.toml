@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-to-markdown-cli"
+version = "0.3.0"
+description = "CLI tool to convert PDF files (and other documents) to markdown using the Marker API."
+readme = "README.md"
+authors = [
+    { name = "Nikita Sokolsky" },
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Text Processing",
+    "Topic :: Utilities",
+]
+keywords = ["pdf", "markdown", "converter", "cli", "document", "marker", "md"]
+dependencies = [
+    "backoff>=2.0",
+    "diskcache>=5.0",
+    "filetype>=1.0",
+    "pikepdf>=8.0",
+    "pydantic>=2.0",
+    "ratelimit>=2.0",
+    "requests>=2.0",
+    "tqdm>=4.0",
+]
+
+# Define project URLs
+[project.urls]
+"Homepage" = "https://github.com/SokolskyNikita/pdf-to-markdown-cli"
+"Bug Tracker" = "https://github.com/SokolskyNikita/pdf-to-markdown-cli/issues"
+
+# Define console script entry point
+[project.scripts]
+pdf-to-md = "docs_to_md.main:main"
+
+# Just in case: Configure setuptools to find packages in src/
+[tool.setuptools.packages.find]
+where = ["src"]

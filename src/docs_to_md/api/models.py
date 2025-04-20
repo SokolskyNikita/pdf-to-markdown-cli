@@ -44,9 +44,37 @@ class ApiParams:
     force_ocr: bool = False
     paginate: bool = False
     max_pages: Optional[int] = None
+    
+# Map of supported output formats to their extensions
+SUPPORTED_FORMAT_EXTENSIONS = {
+    "markdown": ".md",
+    "json": ".json",
+    "html": ".html",
+    "txt": ".txt"
+}
 
+SUPPORTED_IMAGE_EXTENSIONS: Set[str] = {
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "tiff"
+}
 
-# Supported mime types according to API docs
+SUPPORTED_INPUT_EXTENSIONS: Set[str] = {
+    "pdf",
+    "docx",
+    "doc",
+    "pptx",
+    "ppt",
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "tiff"
+}
+
+# Supported mime types according to datalab_marker_api_docs.md#supported-file-types
 SUPPORTED_MIME_TYPES: Set[str] = {
     # PDF
     'application/pdf',

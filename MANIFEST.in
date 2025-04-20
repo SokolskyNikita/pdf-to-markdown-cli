@@ -2,8 +2,8 @@
 include README.md
 include LICENSE
 
-# Include the package source directory
-recursive-include docs_to_md *
+# Include the package source directory (now within src/)
+recursive-include src/docs_to_md *
 
 # Exclude development/cache/temporary files and directories
 global-exclude *.py[cod]

@@ -16,12 +16,16 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
     Returns:
         Logger instance for the application.
     """
-    # Create formatter
-    formatter = logging.Formatter(
-        fmt="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    
+    # Define base format
+    log_format = "%(asctime)s - %(levelname)s - %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    # Prepend logger name only for DEBUG level
+    if level == logging.DEBUG:
+        log_format = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+
+    formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
+
     # Create handlers
     handlers = []
     
@@ -32,15 +36,21 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
     
     # File handler if specified
     if log_file:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(formatter)
-        handlers.append(file_handler)
+        try:
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setFormatter(formatter)
+            handlers.append(file_handler)
+        except Exception as e:
+            # Log error about file handler creation to stderr temporarily
+            logging.basicConfig(level=logging.ERROR) # Basic config for this message
+            logging.error(f"Failed to create log file handler for {log_file}: {e}", exc_info=False)
     
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     
     # Remove existing handlers from root logger to avoid duplication
+    # This is important if setup_logging could be called multiple times
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
         
@@ -51,11 +61,12 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
     # Silence noisy library loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("backoff").setLevel(logging.WARNING)
+    logging.getLogger("pikepdf").setLevel(logging.WARNING) # Added pikepdf
 
     # Get and return the application-specific logger
-    logger = logging.getLogger("docs_to_md") # Updated name
-    # Ensure the app logger also has the correct level if root is different
-    logger.setLevel(level) 
+    # Ensures propagation is enabled by default
+    logger = logging.getLogger("docs_to_md")
+    logger.setLevel(level) # Ensure app logger level matches request
     return logger
 
 
@@ -79,21 +90,27 @@ class ProgressTracker:
         self.description = description # For fallback
         self.total = total # For fallback
         self.current = 0 # For fallback
-        self.logger = logging.getLogger("docs_to_md.progress") # Updated name
+        self.logger = logging.getLogger("docs_to_md.progress") # Consistent name
         
-        try:
-            # Initialize tqdm here
-            self.pbar = tqdm(
-                total=total, 
-                desc=description, 
-                unit=unit, 
-                file=sys.stderr, # Explicitly use stderr
-                leave=False
-                )
-            self._has_tqdm = True
-        except Exception as e: # Catching generic Exception is broad, but okay for try/except on import/init
-            self.logger.warning(f"Could not initialize tqdm: {e}. Falling back to log messages.")
-            self._has_tqdm = False
+        # Check if stderr is a tty (interactive terminal) before trying tqdm
+        # Avoids tqdm trying to initialize in non-interactive environments (like pipes)
+        if sys.stderr.isatty():
+            try:
+                # Initialize tqdm here
+                self.pbar = tqdm(
+                    total=total, 
+                    desc=description, 
+                    unit=unit, 
+                    file=sys.stderr, # Explicitly use stderr
+                    leave=False
+                    )
+                self._has_tqdm = True
+            except Exception as e:
+                self.logger.warning(f"Could not initialize tqdm: {e}. Falling back to log messages.")
+                self._has_tqdm = False
+        else:
+             self.logger.debug("Not initializing tqdm, stderr is not a TTY.")
+             self._has_tqdm = False
 
     def __enter__(self):
         # The pbar is already created in __init__ if possible
@@ -109,9 +126,15 @@ class ProgressTracker:
         if self._has_tqdm and self.pbar:
             self.pbar.update(count)
         else:
+            # Log progress using the dedicated logger if tqdm isn't active
             self.current += count
             # Log progress only periodically or based on some condition to avoid excessive logging
-            if self.current % 10 == 0 or self.current == self.total: # Example: log every 10 updates or on completion
+            # Log every 10% or the first/last update for less noise
+            log_update = (self.current == 1 or
+                          self.current == self.total or
+                          (self.total > 0 and (self.current % max(1, self.total // 10)) == 0))
+
+            if log_update and not self._has_tqdm: # Only log fallback if tqdm isn't running
                  self.logger.info(f"{self.description}: {self.current}/{self.total}")
     
     def close(self) -> None:
@@ -121,14 +144,3 @@ class ProgressTracker:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-
-# Example usage (for testing):
-# if __name__ == "__main__":
-#     setup_logging()
-#     log = logging.getLogger("docs_to_md")
-#     log.info("Starting test")
-#     with ProgressTracker(10, "Testing Progress") as pt:
-#         for i in range(10):
-#             time.sleep(0.2)
-#             pt.update()
-#     log.info("Finished test") 

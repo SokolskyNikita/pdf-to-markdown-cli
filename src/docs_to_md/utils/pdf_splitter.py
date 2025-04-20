@@ -1,49 +1,16 @@
 import logging
-import os
 import uuid
 from pathlib import Path
 from typing import List, Optional
 
 import pikepdf
 from pydantic import BaseModel
-from tqdm import tqdm
 
 from docs_to_md.utils.exceptions import PDFProcessingError
 from docs_to_md.utils.file_utils import ensure_directory
 from docs_to_md.utils.logging import ProgressTracker
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_path(path: Path) -> Path:
-    """
-    Sanitize path to prevent path traversal attacks.
-    
-    Args:
-        path: Path to sanitize
-        
-    Returns:
-        Sanitized path
-        
-    Raises:
-        PDFProcessingError: If path contains suspicious patterns
-    """
-    try:
-        # Convert to absolute to resolve any .. or other path manipulations
-        path = path.absolute().resolve()
-        
-        # Get the filename only, discarding any directory components
-        safe_name = path.name
-        
-        # Check for suspicious patterns
-        if safe_name != path.name or ".." in str(path):
-            raise PDFProcessingError(f"Potentially unsafe path: {path}")
-            
-        return path
-    except Exception as e:
-        if isinstance(e, PDFProcessingError):
-            raise
-        raise PDFProcessingError(f"Failed to sanitize path {path}: {e}")
 
 
 class PDFChunkInfo(BaseModel):
@@ -163,8 +130,8 @@ def chunk_pdf_to_temp(pdf_path: str, pages_per_chunk: int = 10, tmp_dir: Optiona
     if pages_per_chunk < 1:
         raise ValueError("pages_per_chunk must be at least 1")
 
-    # Sanitize and validate path
-    path = _sanitize_path(Path(pdf_path))
+    # Path validation needs to happen in the caller now or use a different util
+    path = Path(pdf_path) 
     
     if not path.exists():
         raise PDFProcessingError(f"File does not exist: {pdf_path}")
@@ -183,6 +150,7 @@ def chunk_pdf_to_temp(pdf_path: str, pages_per_chunk: int = 10, tmp_dir: Optiona
 
         # Create temp directory if not provided
         if tmp_dir is None:
+            # TODO: Consider making base temp dir configurable or use system temp
             tmp_dir = Path("chunks") / f"{path.stem}_{uuid.uuid4().hex[:8]}"
             ensure_directory(tmp_dir)
 
