@@ -18,7 +18,7 @@ Alice didn't think that proved it at all ; however, she went on : " And how do y
 
 " I suppose so," said Alice.
 
-![](images/chunk_0_img_231523_9c9ee0.jpeg)
+![](images_LLM/chunk_0_img_223227_f3760c.jpeg)
 
 " Well, then," the Cat went on, "you see a dog growls when it's angry, and wags its tail when it's pleased. Now I growl when I'm pleased, and wag my tail when I'm angry. Therefore I'm mad."
 

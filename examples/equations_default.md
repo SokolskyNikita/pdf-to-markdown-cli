@@ -1,4 +1,4 @@
-![](images/page_0_figure_1.jpeg)
+![](images_default/page_0_figure_1.jpeg)
 
 A connected algebraic set with two irreducible components.
 

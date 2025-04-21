@@ -102,11 +102,11 @@ class BatchProcessor:
                                 request.add_chunk(
                                     Path(chunk_info.path), chunk_info.index
                                 )
-                            logger.info(
+                            logger.debug(
                                 f"Created {len(request.chunks)} chunks in {tmp_dir}"
                             )
                         else:
-                            logger.info(
+                            logger.debug(
                                 f"No chunking needed for {file_path} (<= {self.chunk_size} pages)"
                             )
                     except (PDFProcessingError, Exception) as e:
@@ -223,7 +223,7 @@ class MarkerProcessor:
             logger.warning(f"No processable files found in {input_path}")
             return []
 
-        logger.info(f"Prepared {len(files_to_process)} file(s) for processing.")
+        logger.debug(f"Prepared {len(files_to_process)} file(s) for processing.")
         for file_path in files_to_process:
             try:
                 output_paths = determine_output_paths(
@@ -298,7 +298,7 @@ class MarkerProcessor:
             )
             return
 
-        logger.info(
+        logger.debug(
             f"Starting result processing for {len(submitted_requests)} submitted request(s)..."
         )
         request_ids_to_process = list(submitted_requests.keys())

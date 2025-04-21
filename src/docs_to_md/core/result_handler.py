@@ -204,26 +204,35 @@ class ResultHandler:
         return fallback_name
 
     def _process_chunk_images(
-        self, images: Dict[str, str], chunk: ChunkInfo, tmp_dir: Path, chunk_size: int
+        self, images: Dict[str, str], chunk: ChunkInfo, tmp_dir: Path, chunk_size: int, final_images_dir: Path
     ) -> Dict[str, str]:
-        """Saves images from API response to temp dir and returns name mapping."""
+        """
+        Saves images from API response to temp dir and returns name mapping
+        using the final relative image directory name.
+        """
         if not images or not isinstance(images, dict):
             return {}
 
-        images_dir = tmp_dir / "images"
-        ensure_directory(images_dir)
+        # Images are first saved to a temporary location within the chunk's tmp_dir
+        temp_images_dir = tmp_dir / "images"
+        ensure_directory(temp_images_dir)
         image_map = {}
         logger.debug(
-            f"Processing {len(images)} image(s) for chunk {chunk.index} into {images_dir}"
+            f"Processing {len(images)} image(s) for chunk {chunk.index} into {temp_images_dir}"
         )
+
+        # Get the relative name of the final image directory (e.g., "images_xyz123abc")
+        final_images_dir_name = final_images_dir.name
 
         for original_name, b64_content in images.items():
             markdown_name = self._transform_image_name(original_name, chunk, chunk_size)
-            image_file_path = images_dir / markdown_name
+            # Save to the temporary image directory first
+            image_file_path = temp_images_dir / markdown_name
             try:
                 image_data = base64.b64decode(b64_content)
                 image_file_path.write_bytes(image_data)
-                image_map[original_name] = f"images/{markdown_name}"
+                # The map for markdown replacement uses the FINAL relative directory name
+                image_map[original_name] = f"{final_images_dir_name}/{markdown_name}"
             except ValueError as b64_err:  # Catch ValueError for decode issues
                 logger.error(
                     f"Failed to decode base64 for image '{original_name}' in chunk {chunk.index}: {b64_err}"
@@ -418,7 +427,7 @@ class ResultHandler:
                 is_failed = True
                 break
             elif status.status == StatusEnum.COMPLETE:
-                logger.info(f"Chunk {chunk.request_id} complete. Saving result...")
+                logger.debug(f"Chunk {chunk.request_id} complete. Saving result...")
                 try:
                     self._save_chunk_result(chunk, status, req)
                     # Mark complete *only after* saving result successfully
@@ -476,14 +485,20 @@ class ResultHandler:
             raise ResultProcessingError(
                 f"Request temporary directory is not set for request {req.request_id}."
             )
+        # Add check for images_dir needed for processing images
+        if status.images and req.images_dir is None:
+             raise ResultProcessingError(
+                f"Request final images directory is not set for request {req.request_id}, but images were received."
+            )
 
         temp_file = chunk.get_result_path(req.tmp_dir)
         logger.debug(f"Preparing to save chunk {chunk.index} result to {temp_file}")
 
         image_map = {}
         if status.images:
+            # Pass the final images directory path to _process_chunk_images
             image_map = self._process_chunk_images(
-                status.images, chunk, req.tmp_dir, req.chunk_size
+                status.images, chunk, req.tmp_dir, req.chunk_size, req.images_dir
             )
             if image_map:
                 logger.debug(
@@ -491,9 +506,10 @@ class ResultHandler:
                 )
                 for original_name, new_ref in image_map.items():
                     # Simple replace; assumes API format ](original_name)
+                    # new_ref now correctly contains "images_xyz123abc/page_1_fig_1.jpg"
                     content = content.replace(f"]({original_name})", f"]({new_ref})")
 
-        logger.info(
+        logger.debug(
             f"Saving chunk {chunk.index} result ({len(content)} chars) to {temp_file}"
         )
         self.saver.save_content(content, temp_file)

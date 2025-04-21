@@ -1,4 +1,6 @@
 import logging
+import random
+import string
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -11,74 +13,38 @@ from docs_to_md.api.models import SUPPORTED_FORMAT_EXTENSIONS
 logger = logging.getLogger(__name__)
 
 
+def generate_unique_key(length: int = 8) -> str:
+    """Generates a random alphanumeric key of the specified length."""
+    characters = string.ascii_letters + string.digits
+    return "".join(random.choices(characters, k=length))
+
+
 @dataclass(frozen=True)
 class OutputPaths:
     """Holds the determined output paths for a conversion."""
 
     markdown_path: Path
     images_dir: Path
-
-
-def find_unique_path(
-    base_dir: Path, name: str, extension: Optional[str] = None, is_dir: bool = False
-) -> Path:
-    """Finds a unique path by appending _1, _2, etc., if necessary."""
-    counter = 0
-    unique_name = name
-
-    while True:
-        if counter > 0:
-            unique_name = f"{name}_{counter}"
-
-        target_name = (
-            f"{unique_name}.{extension}" if extension and not is_dir else unique_name
-        )
-        target_path = base_dir / target_name
-
-        path_exists = target_path.is_dir() if is_dir else target_path.exists()
-
-        if not path_exists:
-            # Attempt to create the directory immediately if it's a directory path we're checking
-            # This prevents race conditions if multiple processes check simultaneously
-            if is_dir:
-                try:
-                    target_path.mkdir(parents=False, exist_ok=False)
-                    logger.debug(
-                        f"Successfully created unique directory: {target_path}"
-                    )
-                    return target_path
-                except FileExistsError:
-                    # Directory was created between the check and mkdir, loop again
-                    logger.debug(
-                        f"Directory {target_path} was created by another process, retrying."
-                    )
-                    pass
-                except OSError as e:
-                    logger.error(f"Failed to create directory {target_path}: {e}")
-                    raise  # Reraise unexpected errors
-            else:
-                return target_path  # For files, just return the non-existent path
-
-        counter += 1
-        if counter > 1000:  # Safety break
-            raise OSError(
-                f"Could not find a unique path for {name} in {base_dir} after 1000 attempts."
-            )
+    unique_key: str # Add the key for potential later use
 
 
 def determine_output_paths(
     input_file: Path, output_dir_config: Optional[Path], output_format: str
 ) -> OutputPaths:
     """
-    Determines the final output markdown path and images directory path,
-    handling collisions by appending suffixes (_1, _2, ...).
-    Ensures the final image directory exists.
+    Determines the final output markdown path and images directory path
+    using a unique key for each run.
+    The image directory path is determined but not created here.
     """
     if not input_file.is_file():
         raise ValueError(f"Input path must be a file: {input_file}")
 
+    unique_key = generate_unique_key()
+    logger.debug(f"Generated unique key for run: {unique_key}")
+
     base_output_dir = output_dir_config if output_dir_config else input_file.parent
     try:
+        # Still ensure the base output directory exists
         base_output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         raise FileError(
@@ -91,23 +57,24 @@ def determine_output_paths(
         file_extension = file_extension[1:]  # Remove leading dot if present
 
     markdown_filename_base = input_file.stem
-    final_markdown_path = find_unique_path(
-        base_dir=base_output_dir,
-        name=markdown_filename_base,
-        extension=file_extension,  # Use the mapped extension
-        is_dir=False,
-    )
+    final_markdown_filename = f"{markdown_filename_base}_{unique_key}.{file_extension}"
+    final_markdown_path = base_output_dir / final_markdown_filename
+
     logger.debug(f"Determined final markdown path: {final_markdown_path}")
 
-    # Save to /images -- or into images_n if it already exists
-    image_dir_base_name = "images"
+    # Determine image directory path (placed in the same dir as the markdown file)
+    image_dir_name = f"images_{unique_key}"
+    final_images_dir = base_output_dir / image_dir_name
 
-    final_images_dir = find_unique_path(
-        base_dir=base_output_dir, name=image_dir_base_name, is_dir=True
-    )
+    # Note: The image directory is NOT created here.
+    # Creation should happen later, only if images are actually extracted.
 
     logger.info(
         f"Determined final paths: Markdown='{final_markdown_path}', Images='{final_images_dir}'"
     )
 
-    return OutputPaths(markdown_path=final_markdown_path, images_dir=final_images_dir)
+    return OutputPaths(
+        markdown_path=final_markdown_path,
+        images_dir=final_images_dir,
+        unique_key=unique_key
+    )
