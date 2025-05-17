@@ -53,6 +53,75 @@ class BatchProcessor:
     def should_chunk(self, file_path: Path) -> bool:
         return file_path.suffix.lower() == ".pdf"
 
+    def _chunk_file(
+        self, file_path: Path, tmp_dir: Path, request: ConversionRequest
+    ) -> bool:
+        """Chunk the provided PDF and populate the request object.
+
+        Returns ``True`` if chunking fails and the request should be marked
+        as failed.
+        """
+        try:
+            chunk_result = chunk_pdf_to_temp(str(file_path), self.chunk_size, tmp_dir)
+            if chunk_result:
+                for chunk_info in chunk_result.chunks:
+                    request.add_chunk(Path(chunk_info.path), chunk_info.index)
+                logger.debug(
+                    f"Created {len(request.chunks)} chunks in {tmp_dir}"
+                )
+            else:
+                logger.debug(
+                    f"No chunking needed for {file_path} (<= {self.chunk_size} pages)"
+                )
+            return False
+        except (PDFProcessingError, Exception) as e:
+            logger.error(f"Error chunking PDF {file_path}: {e}", exc_info=True)
+            request.set_status(Status.FAILED, f"Error chunking PDF: {e}")
+            self.cache.save(request)
+            return True
+
+    def _submit_chunks(
+        self, request: ConversionRequest, api_params: ApiParams
+    ) -> bool:
+        """Submit all chunks to the API.
+
+        Returns ``True`` if any submission fails.
+        """
+        submission_failed = False
+        with ProgressTracker(len(request.chunks), "Submitting to API", "chunk") as progress:
+            for chunk in request.ordered_chunks:
+                try:
+                    chunk_request_id = self.client.submit_file(
+                        chunk.path,
+                        output_format=api_params.output_format,
+                        langs=api_params.langs,
+                        use_llm=api_params.use_llm,
+                        strip_existing_ocr=api_params.strip_existing_ocr,
+                        disable_image_extraction=api_params.disable_image_extraction,
+                        force_ocr=api_params.force_ocr,
+                        paginate=api_params.paginate,
+                        max_pages=api_params.max_pages,
+                    )
+                    if chunk_request_id:
+                        chunk.mark_processing(chunk_request_id)
+                    else:
+                        chunk.mark_failed(
+                            f"API submission failed for {chunk.path.name}"
+                        )
+                        submission_failed = True
+                        break
+                except Exception as submit_e:
+                    logger.error(
+                        f"Unexpected error submitting chunk {chunk.path.name}: {submit_e}",
+                        exc_info=True,
+                    )
+                    chunk.mark_failed(f"Error submitting chunk: {submit_e}")
+                    submission_failed = True
+                    break
+                finally:
+                    progress.update()
+        return submission_failed or request.has_failed
+
     def process_file(
         self,
         file_path: Path,
@@ -60,20 +129,11 @@ class BatchProcessor:
         api_params: ApiParams,
         output_paths_obj: OutputPaths,
     ) -> Optional[str]:
-        """
-        Process a single file: chunk if needed, submit to API.
+        """Process a single file and submit it to the Marker API.
 
-        Args:
-            file_path: Path to the input file.
-            final_output_path: Path where the final output markdown file should be saved.
-            api_params: Parameters for the Marker API call.
-            output_paths_obj: The OutputPaths object containing final markdown and image paths.
-
-        Returns:
-            Request ID for tracking if submission is initiated, otherwise None.
-
-        Raises:
-            FileError: Potentially raised by underlying operations (though many are caught).
+        The method now delegates chunking and submission to smaller helpers to
+        keep the logic readable.  It returns the created request ID, which can
+        later be used to poll for results.
         """
         with TemporaryDirectory(self.root_tmp_dir, file_path.stem) as tmp_dir:
             request = ConversionRequest(
@@ -93,30 +153,7 @@ class BatchProcessor:
 
             try:
                 if self.should_chunk(file_path):
-                    try:
-                        chunk_result = chunk_pdf_to_temp(
-                            str(file_path), self.chunk_size, tmp_dir
-                        )
-                        if chunk_result:
-                            for chunk_info in chunk_result.chunks:
-                                request.add_chunk(
-                                    Path(chunk_info.path), chunk_info.index
-                                )
-                            logger.debug(
-                                f"Created {len(request.chunks)} chunks in {tmp_dir}"
-                            )
-                        else:
-                            logger.debug(
-                                f"No chunking needed for {file_path} (<= {self.chunk_size} pages)"
-                            )
-                    except (PDFProcessingError, Exception) as e:
-                        logger.error(
-                            f"Error chunking PDF {file_path}: {e}", exc_info=True
-                        )
-                        request.set_status(
-                            Status.FAILED, f"Error chunking PDF: {str(e)}"
-                        )
-                        self.cache.save(request)
+                    if self._chunk_file(file_path, tmp_dir, request):
                         return request.request_id
 
                 if not request.chunks:
@@ -126,43 +163,9 @@ class BatchProcessor:
                     f"Submitting {len(request.chunks)} chunk(s) to API for {request.original_file.name}..."
                 )
 
-                submission_failed = False
-                with ProgressTracker(
-                    len(request.chunks), "Submitting to API", "chunk"
-                ) as progress:
-                    for chunk in request.ordered_chunks:
-                        try:
-                            chunk_request_id = self.client.submit_file(
-                                chunk.path,
-                                output_format=api_params.output_format,
-                                langs=api_params.langs,
-                                use_llm=api_params.use_llm,
-                                strip_existing_ocr=api_params.strip_existing_ocr,
-                                disable_image_extraction=api_params.disable_image_extraction,
-                                force_ocr=api_params.force_ocr,
-                                paginate=api_params.paginate,
-                                max_pages=api_params.max_pages,
-                            )
-                            if chunk_request_id:
-                                chunk.mark_processing(chunk_request_id)
-                            else:
-                                chunk.mark_failed(
-                                    f"API submission failed for {chunk.path.name}"
-                                )
-                                submission_failed = True
-                                break
-                        except Exception as submit_e:
-                            logger.error(
-                                f"Unexpected error submitting chunk {chunk.path.name}: {submit_e}",
-                                exc_info=True,
-                            )
-                            chunk.mark_failed(f"Error submitting chunk: {submit_e}")
-                            submission_failed = True
-                            break
-                        finally:
-                            progress.update()
+                submission_failed = self._submit_chunks(request, api_params)
 
-                if submission_failed or request.has_failed:
+                if submission_failed:
                     request.set_status(
                         Status.FAILED,
                         request.error or "One or more chunk submissions failed.",
