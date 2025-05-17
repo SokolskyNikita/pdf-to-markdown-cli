@@ -49,3 +49,6 @@ pdf-to-md = "docs_to_md.main:main"
 # Just in case: Configure setuptools to find packages in src/
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.optional-dependencies]
+test = []
