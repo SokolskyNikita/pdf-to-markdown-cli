@@ -53,6 +53,9 @@ pdf-to-md /path/to/file.pdf --langs "English,French,German"
 
 # Use all Marker OCR enhancements
 pdf-to-md /path/to/file.pdf --max
+
+# Display all available options
+pdf-to-md --help
 ```
 
 ### Full list of CLI options
@@ -71,6 +74,7 @@ pdf-to-md /path/to/file.pdf --max
 - `-cs`, `--chunk-size`: Set PDF chunk size in pages (default: 25)
 - `-o`, `--output-dir`: Absolute path to the output directory. If not provided, output files will be saved in the same directory as their corresponding input files.
 - `-v`, `--verbose`: Enable verbose (DEBUG level) logging
+- `--version`: Show the installed `pdf-to-markdown-cli` version and exit
 
 ### Output Structure
 
@@ -79,6 +83,17 @@ By default, output files are saved in the same directory as the input file with 
 If an output file with the same name already exists, the new file will be automatically renamed using a numeric suffix (e.g., `[input-filename]_1.[format]`, `[input-filename]_2.[format]`, etc.) to avoid overwriting.
 
 If you specify `--output-dir /path/to/output`, the output file will be placed in that directory (e.g., `/path/to/output/report.md`). The same automatic renaming logic applies if a file with the same name exists in the target directory.
+
+### Core Workflow
+
+`MarkerProcessor` drives the conversion process:
+
+1. Discover files with `FileDiscovery`.
+2. Determine unique output paths for each file and chunk.
+3. Submit jobs to the Marker API via `BatchProcessor`.
+4. Poll for results and combine chunk outputs while moving extracted images.
+
+Settings are validated in `Config.validate()` and request data is cached with `CacheManager` so interrupted runs can resume.
 
 ### API
 
@@ -118,6 +133,8 @@ pdf-to-markdown-cli/ (Project Root)
 └── ... (other config files)
 ```
 
+`pyproject.toml` defines `pdf-to-md` as a console script pointing to `docs_to_md.main:main`, so installing the project exposes the `pdf-to-md` command.
+
 ## Requirements
 
 - Python 3.10 or higher
@@ -134,10 +151,17 @@ To run the code directly from the source tree without installation:
 # pdf-to-md /path/to/file.pdf
 
 # Or running the module directly:
-python -m docs_to_md /path/to/file.pdf 
+python -m docs_to_md /path/to/file.pdf
 ```
 
 For regular use after installation, use the `pdf-to-md` command.
+
+## Getting Started for Contributors
+
+- Run `pdf-to-md --help` to explore all CLI flags. The `examples/` directory contains sample documents for testing.
+- Follow `MarkerProcessor.process()` in `docs_to_md/core/processor.py` to see how jobs are prepared and results combined.
+- Consult `datalab_marker_api_docs.md` for full details on authentication and Marker API parameters.
+- Utilities in `docs_to_md/utils` and the caching layer in `docs_to_md/storage` are useful starting points for deeper customization.
 
 ## License
 
