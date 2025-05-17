@@ -48,7 +48,8 @@ class ConversionRequest(BaseModel):
     output_format: str = "markdown"
     status: Status = Status.PENDING
     error: Optional[str] = None
-    chunks: List[ChunkInfo] = []
+    # Use default_factory to avoid shared mutable list across instances
+    chunks: List[ChunkInfo] = Field(default_factory=list)
     chunk_size: int
     tmp_dir: Optional[Path] = None  # Directory for temporary files for this conversion
     images_dir: Optional[Path] = None  # Added to store determined image path
