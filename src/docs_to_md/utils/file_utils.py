@@ -94,8 +94,9 @@ class FileDiscovery:
             logger.warning(f"Skipping {file_path}: Supported extension '{ext}', but unsupported detected MIME type '{kind.mime}'.")
             return False
         else:
-            logger.info(f"Skipping {file_path}: Supported extension '{ext}', but MIME detection failed or ambiguous.")
-            return False
+            # MIME detection failed - rely on the earlier suffix extension check
+            logger.debug(f"Adding {file_path}: Supported extension '{ext}', MIME detection failed - using extension as fallback.")
+            return True
 
     @staticmethod
     def find_processable_files(

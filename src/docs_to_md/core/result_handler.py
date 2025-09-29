@@ -91,9 +91,14 @@ class ResultSaver:
             logger.debug(
                 f"Successfully combined results to {output_file} (Final size: {final_size} bytes)"
             )
-            # Ensure images dir exists before returning (though determine_output_paths should have done it)
-            if req.images_dir:
-                ensure_directory(req.images_dir)
+            # Only create images directory if there are actually images to move
+            if req.images_dir and req.tmp_dir:
+                source_images_dir = req.tmp_dir / "images"
+                if source_images_dir.exists():
+                    ensure_directory(req.images_dir)
+                    logger.debug(f"Created images directory {req.images_dir} (images will be moved)")
+                else:
+                    logger.debug(f"No images found - skipping creation of {req.images_dir}")
             return output_file, final_size
 
         except Exception as e:

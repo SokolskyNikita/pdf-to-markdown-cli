@@ -73,14 +73,24 @@ class MarkerClient:
             form_data = {
                 "file": (file_path.name, file_data, kind.mime),
                 "langs": (None, langs),
-                "force_ocr": (None, force_ocr),
-                "paginate": (None, paginate),
-                "strip_existing_ocr": (None, strip_existing_ocr),
-                "disable_image_extraction": (None, disable_image_extraction),
-                "use_llm": (None, use_llm),
                 "output_format": (None, output_format),
-                "max_pages": (None, max_pages),
             }
+            
+            # Add boolean parameters with proper serialization
+            if force_ocr:
+                form_data["force_ocr"] = (None, "true")
+            if paginate:
+                form_data["paginate"] = (None, "true")
+            if strip_existing_ocr:
+                form_data["strip_existing_ocr"] = (None, "true")
+            if disable_image_extraction:
+                form_data["disable_image_extraction"] = (None, "true")
+            if use_llm:
+                form_data["use_llm"] = (None, "true")
+            
+            # Add max_pages only if it has a value
+            if max_pages is not None:
+                form_data["max_pages"] = (None, str(max_pages))
 
             response = requests.post(
                 self.BASE_MARKER_API_ENDPOINT,
