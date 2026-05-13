@@ -4,13 +4,24 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/pdf-to-markdown-cli.svg)](https://pypi.org/project/pdf-to-markdown-cli/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-`pdf-to-md` converts PDFs and other document files to Markdown, JSON, or HTML through the [Datalab Marker API](https://www.datalab.to/marker).
+Fast command-line PDF to Markdown conversion powered by the [Datalab Marker API](https://www.datalab.to/marker).
 
-It is a small CLI wrapper around the `docs_to_md` Python package. It handles local file discovery, PDF chunking, API submission, polling, output file naming, extracted images, and temporary/cache cleanup.
+`pdf-to-md` is built for people who need reliable Markdown output from PDFs, including long books, reports, papers, scans, and directories full of source documents. It can split large PDFs into smaller page chunks, submit those chunks as separate Marker jobs, poll until they finish, and stitch the results back into one output file.
+
+The result: less waiting on one giant conversion, fewer failures on large files, and a repeatable CLI workflow you can run from any shell.
+
+## Why use this tool
+
+- Convert PDFs to Markdown with one command.
+- Handle giant PDFs efficiently by chunking pages and merging the finished output.
+- Process a single file or recursively convert supported files in a directory.
+- Keep extracted images with the generated Markdown and rewrite image links automatically.
+- Choose Markdown by default, or request JSON/HTML when you need structured output.
+- Use Marker OCR and enhancement options without writing API polling code yourself.
 
 ## Quick start
 
-Install the package:
+Install:
 
 ```bash
 pip install pdf-to-markdown-cli
@@ -28,13 +39,19 @@ Convert one file:
 pdf-to-md ./examples/equations.pdf
 ```
 
-Convert every supported file under a directory:
+Convert a large PDF with smaller chunks:
+
+```bash
+pdf-to-md ./huge-report.pdf --chunk-size 10
+```
+
+Convert every supported file in a directory:
 
 ```bash
 pdf-to-md ./docs
 ```
 
-The default output is Markdown. Use `--json` or `--html` to request another Marker output format:
+Markdown is the default output. Use `--json` or `--html` when you want another Marker output format:
 
 ```bash
 pdf-to-md ./examples/equations.pdf --json
@@ -47,15 +64,25 @@ You can also run the package as a module:
 python -m docs_to_md ./examples/equations.pdf
 ```
 
-## What the CLI does
+## Built for large PDFs
 
-- Accepts either a single input file or a directory.
-- Recursively scans directories for supported extensions.
-- Splits PDFs larger than the configured chunk size, submits each chunk, and combines completed chunks in order.
-- Sends Marker options such as OCR language, LLM enhancement, forced OCR, pagination, and maximum pages.
-- Stores in-flight request/chunk state in a local disk cache while processing.
-- Writes output files with a short unique suffix to avoid collisions.
-- Saves extracted images only when Marker returns images, then rewrites Markdown image references to the final image folder.
+Large PDFs are where this CLI is most useful.
+
+By default, PDFs are split into 25-page chunks before submission. Each chunk is submitted to Marker, tracked independently, and written to a temporary result file when complete. Once all chunks finish, the CLI combines them in page order into a single `.md`, `.json`, or `.html` file.
+
+You can tune the chunk size:
+
+```bash
+pdf-to-md ./book.pdf --chunk-size 15
+```
+
+Or send a PDF as one practical unit:
+
+```bash
+pdf-to-md ./book.pdf --no-chunk
+```
+
+Chunking helps long conversions finish more reliably because each Marker request handles a smaller page range, while the CLI takes care of polling and final assembly.
 
 ## Supported formats
 
@@ -87,6 +114,8 @@ images_a1b2c3d4/
 ```
 
 The image directory is created only when the Marker result includes images. If no images are returned, no empty image directory is left behind.
+
+When images are returned, Markdown image links are rewritten to point at the generated image directory.
 
 ## CLI reference
 
@@ -128,6 +157,32 @@ Local state is stored under `~/.docs_to_md/` by default:
 - `~/.docs_to_md/tmp`: temporary chunk and intermediate output files.
 
 If either directory is not writable, the CLI falls back to the system temp directory under `.docs_to_md/`.
+
+## Examples
+
+Run OCR in multiple languages:
+
+```bash
+pdf-to-md ./paper.pdf --langs "English,French"
+```
+
+Use Marker LLM enhancement:
+
+```bash
+pdf-to-md ./paper.pdf --llm
+```
+
+Force OCR on every page:
+
+```bash
+pdf-to-md ./scan.pdf --force
+```
+
+Use all high-quality OCR enhancement flags together:
+
+```bash
+pdf-to-md ./scan.pdf --max
+```
 
 ## Development
 
