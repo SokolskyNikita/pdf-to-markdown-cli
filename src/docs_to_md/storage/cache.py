@@ -60,13 +60,11 @@ class CacheManager:
         Returns:
             ConversionRequest if found, None otherwise
             
-        Raises:
-            CacheError: If retrieval fails
         """
         with self._lock:
             try:
                 data = self.cache.get(request_id)
-                if data:
+                if data is not None:
                     return ConversionRequest.model_validate(data)
                 return None
             except Exception as e:

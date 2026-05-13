@@ -81,32 +81,46 @@ class FakeMarkerClient:
 
 
 class TestCLIOperation(unittest.TestCase):
-    def test_process_equations_pdf(self):
+    def test_process_example_pdfs(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            input_pdf = Path("examples/equations.pdf")
             env = {"MARKER_PDF_KEY": "test"}
+            example_pdfs = [
+                Path("examples/equations.pdf"),
+                Path("examples/alice_in_wonderland_sample.pdf"),
+            ]
+
             with mock.patch.dict(os.environ, env, clear=False):
                 with mock.patch("docs_to_md.core.processor.MarkerClient", FakeMarkerClient):
                     with mock.patch("docs_to_md.core.result_handler.time.sleep", return_value=None):
                         with mock.patch("docs_to_md.core.processor.CacheManager", DummyCacheManager):
-                            with mock.patch("docs_to_md.core.processor.chunk_pdf_to_temp", dummy_chunk_pdf_to_temp):
+                            with mock.patch(
+                                "docs_to_md.core.processor.chunk_pdf_to_temp",
+                                dummy_chunk_pdf_to_temp,
+                            ):
                                 from tests.filetype import Type
-                                with mock.patch("filetype.guess", return_value=Type("application/pdf")):
-                                    cfg = Config(
-                                        api_key=env["MARKER_PDF_KEY"],
-                                        input_path=str(input_pdf),
-                                        output_dir=Path(tmp_dir),
-                                        output_format="markdown",
-                                        chunk_size=1000,
-                                    )
-                                    cfg.validate()
-                                    processor = MarkerProcessor(cfg)
-                                    processor.process()
 
-            md_files = list(Path(tmp_dir).glob("*.md"))
-            self.assertEqual(len(md_files), 1)
-            content = md_files[0].read_text().strip()
-            self.assertIn("# mock", content)
+                                with mock.patch(
+                                    "filetype.guess", return_value=Type("application/pdf")
+                                ):
+                                    for input_pdf in example_pdfs:
+                                        output_dir = Path(tmp_dir) / input_pdf.stem
+                                        output_dir.mkdir(parents=True, exist_ok=True)
+
+                                        cfg = Config(
+                                            api_key=env["MARKER_PDF_KEY"],
+                                            input_path=str(input_pdf),
+                                            output_dir=output_dir,
+                                            output_format="markdown",
+                                            chunk_size=1000,
+                                        )
+                                        cfg.validate()
+                                        processor = MarkerProcessor(cfg)
+                                        processor.process()
+
+                                        md_files = list(output_dir.glob("*.md"))
+                                        self.assertEqual(len(md_files), 1)
+                                        content = md_files[0].read_text().strip()
+                                        self.assertIn("# mock", content)
 
 
 if __name__ == "__main__":

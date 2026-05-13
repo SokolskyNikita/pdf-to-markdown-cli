@@ -1,6 +1,5 @@
 import logging
-import random
-import string
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -14,9 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 def generate_unique_key(length: int = 8) -> str:
-    """Generates a random alphanumeric key of the specified length."""
-    characters = string.ascii_letters + string.digits
-    return "".join(random.choices(characters, k=length))
+    """Generate a short unique key for output file naming."""
+    return uuid.uuid4().hex[:length]
 
 
 @dataclass(frozen=True)
@@ -39,9 +37,6 @@ def determine_output_paths(
     if not input_file.is_file():
         raise ValueError(f"Input path must be a file: {input_file}")
 
-    unique_key = generate_unique_key()
-    logger.debug(f"Generated unique key for run: {unique_key}")
-
     base_output_dir = output_dir_config if output_dir_config else input_file.parent
     try:
         # Still ensure the base output directory exists
@@ -51,30 +46,31 @@ def determine_output_paths(
             f"Could not create or access base output directory {base_output_dir}: {e}"
         ) from e
 
-    # Use the imported mapping to get the desired file extension (remove the leading dot)
-    file_extension = SUPPORTED_FORMAT_EXTENSIONS.get(output_format, output_format)
-    if file_extension.startswith("."):
-        file_extension = file_extension[1:]  # Remove leading dot if present
+    extension = SUPPORTED_FORMAT_EXTENSIONS.get(output_format)
+    if not extension:
+        raise FileError(f"Unsupported output format: {output_format}")
+    file_extension = extension.lstrip(".")
 
     markdown_filename_base = input_file.stem
-    final_markdown_filename = f"{markdown_filename_base}_{unique_key}.{file_extension}"
-    final_markdown_path = base_output_dir / final_markdown_filename
+    while True:
+        unique_key = generate_unique_key()
+        final_output_filename = f"{markdown_filename_base}_{unique_key}.{file_extension}"
+        final_output_path = base_output_dir / final_output_filename
+        final_images_dir = base_output_dir / f"images_{unique_key}"
+        if not final_output_path.exists() and not final_images_dir.exists():
+            break
 
-    logger.debug(f"Determined final markdown path: {final_markdown_path}")
-
-    # Determine image directory path (placed in the same dir as the markdown file)
-    image_dir_name = f"images_{unique_key}"
-    final_images_dir = base_output_dir / image_dir_name
+    logger.debug(f"Determined final output path: {final_output_path}")
 
     # Note: The image directory is NOT created here.
     # Creation should happen later, only if images are actually extracted.
 
     logger.info(
-        f"Determined final paths: Markdown='{final_markdown_path}', Images='{final_images_dir}'"
+        f"Determined final paths: Output='{final_output_path}', Images='{final_images_dir}'"
     )
 
     return OutputPaths(
-        markdown_path=final_markdown_path,
+        markdown_path=final_output_path,
         images_dir=final_images_dir,
         unique_key=unique_key
     )

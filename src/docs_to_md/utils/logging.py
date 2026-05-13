@@ -41,9 +41,10 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
             file_handler.setFormatter(formatter)
             handlers.append(file_handler)
         except Exception as e:
-            # Log error about file handler creation to stderr temporarily
-            logging.basicConfig(level=logging.ERROR) # Basic config for this message
-            logging.error(f"Failed to create log file handler for {log_file}: {e}", exc_info=False)
+            print(
+                f"Failed to create log file handler for {log_file}: {e}",
+                file=sys.stderr,
+            )
     
     # Configure root logger
     root_logger = logging.getLogger()
@@ -53,6 +54,10 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
     # This is important if setup_logging could be called multiple times
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
+        try:
+            handler.close()
+        except Exception:
+            pass
         
     # Add our handlers to root logger
     for handler in handlers:

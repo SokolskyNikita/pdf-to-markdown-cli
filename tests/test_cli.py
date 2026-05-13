@@ -26,11 +26,26 @@ class TestCLI(unittest.TestCase):
             with mock.patch.dict(os.environ, env, clear=False):
                 with mock.patch.object(sys, "argv", argv):
                     config = create_config_from_args()
-            self.assertEqual(config.input_path, str(input_file))
+            self.assertEqual(Path(config.input_path), input_file.resolve())
             self.assertEqual(config.chunk_size, 5)
             self.assertTrue(config.use_llm)
             self.assertTrue(config.force_ocr)
-            self.assertEqual(config.output_dir, Path(tmp_dir))
+            self.assertEqual(config.output_dir, Path(tmp_dir).resolve())
+
+    def test_create_config_html_output(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_file = Path(tmp_dir) / "input.txt"
+            input_file.write_text("data")
+            env = {"MARKER_PDF_KEY": "abc"}
+            argv = [
+                "prog",
+                str(input_file),
+                "--html",
+            ]
+            with mock.patch.dict(os.environ, env, clear=False):
+                with mock.patch.object(sys, "argv", argv):
+                    config = create_config_from_args()
+            self.assertEqual(config.output_format, "html")
 
 
 if __name__ == "__main__":

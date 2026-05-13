@@ -60,6 +60,32 @@ class TestSettings(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 cfg.validate()
 
+    def test_config_falls_back_when_cache_dir_not_writable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            test_file = tmp_path / "input.txt"
+            test_file.write_text("data")
+
+            # File path cannot be created as a directory, forcing fallback.
+            cache_dir_as_file = tmp_path / "cache"
+            cache_dir_as_file.write_text("not-a-directory")
+
+            cfg = Config(
+                api_key="key",
+                input_path=str(test_file),
+                output_dir=tmp_path,
+                output_format="markdown",
+                cache_dir=cache_dir_as_file,
+                root_tmp_dir=tmp_path / "tmp",
+            )
+            cfg.validate()
+
+            expected_cache_dir = (
+                Path(tempfile.gettempdir()) / ".docs_to_md" / "cache"
+            ).resolve(strict=False)
+            self.assertEqual(cfg.cache_dir, expected_cache_dir)
+            self.assertTrue(cfg.root_tmp_dir.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

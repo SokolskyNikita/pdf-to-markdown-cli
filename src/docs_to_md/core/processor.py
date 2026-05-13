@@ -14,7 +14,6 @@ from docs_to_md.storage.cache import CacheManager
 from docs_to_md.storage.models import ConversionRequest, Status
 from docs_to_md.utils.exceptions import (
     FileError,
-    PDFProcessingError,
     ConfigurationError,
 )
 from docs_to_md.utils.file_utils import FileDiscovery, TemporaryDirectory
@@ -74,7 +73,7 @@ class BatchProcessor:
                     f"No chunking needed for {file_path} (<= {self.chunk_size} pages)"
                 )
             return False
-        except (PDFProcessingError, Exception) as e:
+        except Exception as e:
             logger.error(f"Error chunking PDF {file_path}: {e}", exc_info=True)
             request.set_status(Status.FAILED, f"Error chunking PDF: {e}")
             self.cache.save(request)
@@ -235,7 +234,7 @@ class MarkerProcessor:
                     output_format=self.config.output_format,
                 )
                 jobs.append((file_path, output_paths))
-            except (ValueError, FileError, OSError, Exception) as path_e:
+            except Exception as path_e:
                 logger.error(
                     f"Error determining output paths for {file_path}: {path_e}. Skipping file."
                 )

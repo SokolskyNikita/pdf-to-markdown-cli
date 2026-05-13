@@ -1,5 +1,6 @@
 import json
 import logging
+import mimetypes
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +28,19 @@ logger = logging.getLogger(__name__)
 
 class MarkerClient:
     BASE_MARKER_API_ENDPOINT = "https://www.datalab.to/api/v1/marker"
+    _EXTENSION_TO_MIME = {
+        ".doc": "application/msword",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".odt": "application/vnd.oasis.opendocument.text",
+        ".ppt": "application/vnd.ms-powerpoint",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".odp": "application/vnd.oasis.opendocument.presentation",
+        ".xls": "application/vnd.ms-excel",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+        ".epub": "application/epub+zip",
+        ".html": "text/html",
+    }
 
     # See datalab_marker_api_docs.md#authentication for API key details
     def __init__(self, api_key: str):
@@ -34,6 +48,19 @@ class MarkerClient:
             raise APIError("API key is required")
 
         self.headers = {"X-Api-Key": api_key.strip()}
+
+    def _detect_mime_type(self, file_path: Path, file_data: bytes) -> Optional[str]:
+        """Infer MIME type from file header first, then file extension."""
+        detected = filetype.guess(file_data)
+        if detected and detected.mime:
+            return detected.mime
+
+        suffix = file_path.suffix.lower()
+        if suffix in self._EXTENSION_TO_MIME:
+            return self._EXTENSION_TO_MIME[suffix]
+
+        guessed, _ = mimetypes.guess_type(file_path.name)
+        return guessed
 
     @sleep_and_retry
     @limits(calls=MAX_REQUESTS_PER_MINUTE, period=60)
@@ -62,16 +89,17 @@ class MarkerClient:
                 raise APIError(f"File not found: {file_path}")
 
             file_data = FileIO.read_file(file_path)
-            kind = filetype.guess(file_data)
+            mime_type = self._detect_mime_type(file_path, file_data)
 
             # Supported types listed in datalab_marker_api_docs.md#supported-file-types
-            if not kind or kind.mime not in SUPPORTED_MIME_TYPES:
+            if not mime_type or mime_type not in SUPPORTED_MIME_TYPES:
                 raise APIError(
-                    f"Unsupported file type: {kind.mime if kind else 'unknown'}"
+                    f"Unsupported file type for '{file_path.name}': "
+                    f"{mime_type or 'unknown'}"
                 )
 
             form_data = {
-                "file": (file_path.name, file_data, kind.mime),
+                "file": (file_path.name, file_data, mime_type),
                 "langs": (None, langs),
                 "output_format": (None, output_format),
             }

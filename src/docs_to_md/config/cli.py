@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
         __version__ = 'unknown' # Fallback if package not installed
         
     parser = argparse.ArgumentParser(
-        description="Process PDF files using Marker API.",
+        description="Process documents with the Marker API.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
@@ -28,8 +28,10 @@ def parse_args() -> argparse.Namespace:
     )
     
     parser.add_argument("input", help="Input file or directory path")
-    
-    parser.add_argument("--json", action="store_true", help="Output in JSON format")
+
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument("--json", action="store_true", help="Output in JSON format")
+    output_group.add_argument("--html", action="store_true", help="Output in HTML format")
     
     parser.add_argument("-l", "--langs", default="English", help="Comma-separated OCR languages")
     parser.add_argument("--llm", action="store_true", help="Use LLM for enhanced processing")
@@ -54,17 +56,23 @@ def create_config_from_args() -> Config:
     
     try:
         api_key = get_env_var("MARKER_PDF_KEY")
-    except Exception as e:
+    except FileError as e:
         raise ConfigurationError(f"API key not found: {e}. Set the MARKER_PDF_KEY environment variable.")
         
     # If --no-chunk is specified, override chunk size to effectively disable chunking
     chunk_size = 1_000_000 if args.no_chunk else args.chunk_size
     
+    output_format = "markdown"
+    if args.json:
+        output_format = "json"
+    elif args.html:
+        output_format = "html"
+
     config = Config(
         api_key=api_key,
         input_path=args.input,
         output_dir=Path(args.output_dir) if args.output_dir else None,
-        output_format="json" if args.json else "markdown",
+        output_format=output_format,
         langs=args.langs,
         use_llm=args.llm or args.max,
         strip_existing_ocr=args.strip or args.max,

@@ -1,64 +1,95 @@
-# PDF to Markdown CLI
+# PDF to markdown CLI
 
-Convert PDFs and other documents to Markdown using the [Marker API](https://www.datalab.to/marker).
+[![PyPI](https://img.shields.io/pypi/v/pdf-to-markdown-cli.svg)](https://pypi.org/project/pdf-to-markdown-cli/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pdf-to-markdown-cli.svg)](https://pypi.org/project/pdf-to-markdown-cli/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## Features
+Command-line utility for converting PDFs and other supported documents into Markdown, JSON, or HTML using the [Marker API](https://www.datalab.to/marker).
 
-- Convert PDFs, Word docs, PowerPoint, spreadsheets, EPUB, HTML, and images to Markdown/JSON/HTML
-- Automatic chunking for large documents with parallel processing
-- Progress tracking and local caching for interrupted runs
-- Full OCR customization options
+## Why use this tool
+
+- Converts single files or entire directories
+- Automatically splits large PDFs into chunks and merges results
+- Persists request state locally so interrupted runs can recover
+- Rewrites and copies extracted images into deterministic output folders
+- Supports OCR/LLM tuning flags from the Marker API
+
+## Supported formats
+
+### Input
+
+- PDF (`.pdf`)
+- Word (`.doc`, `.docx`, `.odt`)
+- PowerPoint (`.ppt`, `.pptx`, `.odp`)
+- Spreadsheets (`.xls`, `.xlsx`, `.ods`)
+- EPUB/HTML (`.epub`, `.html`)
+- Images (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tiff`)
+
+### Output
+
+- Markdown (`.md`, default)
+- JSON (`.json`)
+- HTML (`.html`)
 
 ## Installation
-
-### From PyPI
 
 ```bash
 pip install pdf-to-markdown-cli
 ```
 
-### From source
+From source:
 
 ```bash
-git clone https://github.com/SokolskyNikita/pdf-to-markdown-cli.git 
+git clone https://github.com/SokolskyNikita/pdf-to-markdown-cli.git
 cd pdf-to-markdown-cli
 pip install -e .
 ```
 
-## Usage
+## Quick start
 
 ```bash
-# Get API key from https://www.datalab.to/marker
-export MARKER_PDF_KEY=your_api_key_here
-
-# Basic usage
-pdf-to-md /path/to/file.pdf
-
-# Common options
-pdf-to-md /path/to/file.pdf --json          # JSON output
-pdf-to-md /path/to/file.pdf --noimg         # Disable images  
-pdf-to-md /path/to/file.pdf --max           # Enable all flags for maximum output quality
+export MARKER_PDF_KEY="your_api_key"
+pdf-to-md ./examples/equations.pdf
 ```
 
-## CLI Options
+Process a directory:
 
-- `input`: Input file or directory path
-- `--json`: Output in JSON format (default is markdown)
-- `--langs`: Comma-separated OCR languages (default: "English")
-- `--llm`: Use LLM for enhanced processing
-- `--strip`: Redo OCR processing
-- `--noimg`: Disable image extraction
-- `--force`: Force OCR on all pages
-- `--pages`: Add page delimiters
-- `--max`: Enable all OCR enhancements (equivalent to --llm --strip --force)
-- `-mp`, `--max-pages`: Maximum number of pages to process from the start of the file
-- `--no-chunk`: Disable PDF chunking
-- `-cs`, `--chunk-size`: Set PDF chunk size in pages (default: 25)
-- `-o`, `--output-dir`: Absolute path to the output directory
-- `-v`, `--verbose`: Enable verbose (DEBUG level) logging
-- `--version`: Show the installed version and exit
+```bash
+pdf-to-md ./docs
+```
 
-## Requirements
+Use JSON or HTML output:
 
-- Python ≥3.10
-- API key from [datalab.to](https://www.datalab.to/marker)
+```bash
+pdf-to-md ./examples/equations.pdf --json
+pdf-to-md ./examples/equations.pdf --html
+```
+
+## CLI options
+
+- `input`: input file or directory path
+- `--json`: output JSON instead of Markdown
+- `--html`: output HTML instead of Markdown
+- `--langs`: comma-separated OCR languages (default: `English`)
+- `--llm`: enable LLM-enhanced processing
+- `--strip`: redo OCR
+- `--noimg`: disable image extraction
+- `--force`: force OCR on all pages
+- `--pages`: include page delimiters
+- `--max`: enable all OCR enhancement flags (`--llm --strip --force`)
+- `-mp`, `--max-pages`: process only the first N pages
+- `--no-chunk`: disable PDF chunking
+- `-cs`, `--chunk-size`: PDF pages per chunk (default: `25`)
+- `-o`, `--output-dir`: absolute output directory path
+- `-v`, `--verbose`: debug logging
+- `--version`: show installed package version
+
+## Development
+
+Run tests:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+For contributions or questions, open a GitHub issue.

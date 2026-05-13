@@ -50,45 +50,63 @@ SUPPORTED_FORMAT_EXTENSIONS = {
     "markdown": ".md",
     "json": ".json",
     "html": ".html",
-    "txt": ".txt"
 }
 
 SUPPORTED_IMAGE_EXTENSIONS: Set[str] = {
     "jpg",
     "jpeg",
     "png",
+    "webp",
     "gif",
-    "tiff"
+    "tiff",
 }
 
 SUPPORTED_INPUT_EXTENSIONS: Set[str] = {
     "pdf",
     "docx",
     "doc",
+    "odt",
     "pptx",
     "ppt",
+    "odp",
+    "xlsx",
+    "xls",
+    "ods",
+    "epub",
+    "html",
     "jpg",
     "jpeg",
     "png",
+    "webp",
     "gif",
-    "tiff"
+    "tiff",
 }
 
 # Supported mime types according to datalab_marker_api_docs.md#supported-file-types
 SUPPORTED_MIME_TYPES: Set[str] = {
     # PDF
-    'application/pdf',
+    "application/pdf",
     # Word documents
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.oasis.opendocument.text",
     # Powerpoint
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.oasis.opendocument.presentation",
+    # Spreadsheets
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    # HTML/EPUB
+    "text/html",
+    "application/xhtml+xml",
+    "application/epub+zip",
     # Images
-    'image/png',
-    'image/jpeg',
-    'image/webp',
-    'image/gif',
-    'image/tiff',
-    'image/jpg'
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/tiff",
+    "image/jpg",
 } 

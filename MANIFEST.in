@@ -1,24 +1,13 @@
 # Include the README and LICENSE
 include README.md
 include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
 
-# Include the package source directory (now within src/)
-recursive-include src/docs_to_md *
+# Include package source
+recursive-include src/docs_to_md *.py
 
-# Exclude development/cache/temporary files and directories
+# Exclude generated files
 global-exclude *.py[cod]
 global-exclude __pycache__
 global-exclude .DS_Store
-prune .git
-prune .vscode
-prune .marker_cache
-prune pdfs
-prune converted
-prune examples
-prune chunks
-prune __pycache__
-
-# Exclude files not needed for the installed package
-exclude marker_api_docs.md
-exclude requirements.txt
-# exclude setup.py  # This MUST be included in the sdist for building 

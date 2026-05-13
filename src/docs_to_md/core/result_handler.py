@@ -1,4 +1,5 @@
 import base64
+import binascii
 import json
 import logging
 import re
@@ -20,25 +21,24 @@ from docs_to_md.utils.logging import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
+# Exponential backoff settings for per-chunk polling
+CHUNK_RETRY_BACKOFF_FACTOR = 2
+CHUNK_RETRY_INITIAL_DELAY_SECONDS = 5
+CHUNK_RETRY_MAX_ATTEMPTS = 8
+CHUNK_RETRY_MAX_DELAY_SECONDS = 60
+
 
 class ResultSaver:
     """Handles saving combined results and moving assets."""
 
     def save_content(self, content: str, path: Path) -> None:
-        """Saves text content to a file."""
         try:
-            # Ensure parent directory exists before writing
             ensure_directory(path.parent)
             FileIO.write_file(path, content)
         except Exception as e:
             raise ResultProcessingError(f"Failed to save content to {path}: {e}") from e
 
     def combine_results(self, req: ConversionRequest) -> Tuple[Path, int]:
-        """
-        Combine chunk results into a single output file.
-        Assumes req.target_file is set and its parent directory exists.
-        Assumes chunk result files exist in req.tmp_dir.
-        """
         output_file = req.target_file
         if not output_file:
             raise ResultProcessingError(
@@ -61,8 +61,7 @@ class ResultSaver:
                     logger.warning(
                         f"No chunks found for request {req.request_id}, cannot combine. Target file may be empty."
                     )
-                    # Or maybe handle single-file case differently if needed
-                    return output_file, 0  # Return empty size
+                    return output_file, 0
 
                 for i, chunk in enumerate(req.ordered_chunks):
                     result_path = chunk.get_result_path(req.tmp_dir)
@@ -75,23 +74,17 @@ class ResultSaver:
                         f"Appending chunk {i+1}/{len(req.ordered_chunks)} from {result_path.name}"
                     )
                     with open(result_path, "r", encoding="utf-8") as infile:
-                        shutil.copyfileobj(
-                            infile, outf, length=65536
-                        )  # More efficient copying
-                        # Rough size estimation (can be inaccurate for multibyte chars)
-                        # For precise size, reopen and check file size after writing is complete.
+                        shutil.copyfileobj(infile, outf, length=65536)
                         total_size += result_path.stat().st_size
 
                     if i < len(req.ordered_chunks) - 1:
                         outf.write("\n\n")
                         total_size += 2  # Account for separator bytes
 
-            # Verify final file size
             final_size = output_file.stat().st_size
             logger.debug(
                 f"Successfully combined results to {output_file} (Final size: {final_size} bytes)"
             )
-            # Only create images directory if there are actually images to move
             if req.images_dir and req.tmp_dir:
                 source_images_dir = req.tmp_dir / "images"
                 if source_images_dir.exists():
@@ -115,7 +108,6 @@ class ResultSaver:
             ) from e
 
     def move_images(self, source_images_dir: Path, target_images_dir: Path) -> None:
-        """Moves images from temporary source to the final target images directory."""
         if not source_images_dir.exists():
             logger.debug(
                 f"Source images directory {source_images_dir} not found, nothing to move."
@@ -148,27 +140,15 @@ class ResultHandler:
         config: Config,
         check_interval: int = 15,
     ):
-        """
-        Initialize the result handler with shared components.
-
-        Args:
-            client: Initialized MarkerClient instance.
-            cache: Initialized CacheManager instance.
-            config: Application configuration (used for chunk_size).
-            check_interval: Interval (seconds) between API status checks.
-        """
         self.client = client
         self.cache = cache
         self.config = config
         self.check_interval = check_interval
-        self.saver = ResultSaver()  # Handles file system operations for results/images
-
-    # --- Image Processing Methods (Inlined from ImageProcessor) ---
+        self.saver = ResultSaver()
 
     def _transform_image_name(
         self, original_name: str, chunk: ChunkInfo, chunk_size: int
     ) -> str:
-        """Generates a structured image name based on chunk index and page/figure numbers."""
         base_page_num = (chunk.index * chunk_size) + 1
         extension = "jpg"
         parts = original_name.split(".")
@@ -211,14 +191,9 @@ class ResultHandler:
     def _process_chunk_images(
         self, images: Dict[str, str], chunk: ChunkInfo, tmp_dir: Path, chunk_size: int, final_images_dir: Path
     ) -> Dict[str, str]:
-        """
-        Saves images from API response to temp dir and returns name mapping
-        using the final relative image directory name.
-        """
         if not images or not isinstance(images, dict):
             return {}
 
-        # Images are first saved to a temporary location within the chunk's tmp_dir
         temp_images_dir = tmp_dir / "images"
         ensure_directory(temp_images_dir)
         image_map = {}
@@ -226,7 +201,6 @@ class ResultHandler:
             f"Processing {len(images)} image(s) for chunk {chunk.index} into {temp_images_dir}"
         )
 
-        # Get the relative name of the final image directory (e.g., "images_xyz123abc")
         final_images_dir_name = final_images_dir.name
 
         for original_name, b64_content in images.items():
@@ -236,9 +210,8 @@ class ResultHandler:
             try:
                 image_data = base64.b64decode(b64_content)
                 image_file_path.write_bytes(image_data)
-                # The map for markdown replacement uses the FINAL relative directory name
                 image_map[original_name] = f"{final_images_dir_name}/{markdown_name}"
-            except ValueError as b64_err:  # Catch ValueError for decode issues
+            except (ValueError, binascii.Error) as b64_err:
                 logger.error(
                     f"Failed to decode base64 for image '{original_name}' in chunk {chunk.index}: {b64_err}"
                 )
@@ -248,53 +221,117 @@ class ResultHandler:
                 )
         return image_map
 
-    # --- Core Result Processing Logic ---
-
     def process_cache_items(self, request_ids: List[str]) -> None:
-        """Processes a list of completed or pending conversion requests from the cache."""
         if not request_ids:
-            logger.info("No request IDs provided for processing.")
+            logger.info("No request IDs provided for result processing; nothing to do.")
             return
 
-        reqs_to_process = []
-        for req_id in request_ids:
-            req = self.cache.get(req_id)
-            if not req:
-                logger.warning(
-                    f"Could not find request {req_id} in cache for final processing."
-                )
-                continue
+        # Keep looping until all tracked requests reach a terminal state or
+        # disappear from the cache (cleanup).
+        remaining_ids = list(request_ids)
+        pass_count = 0
 
-            # Validate that the required paths are present in the loaded request
-            if not req.target_file:
-                logger.error(
-                    f"Missing target_file path in cached request {req_id}. Skipping."
-                )
-                continue
-            # images_dir is Optional, so we don't strictly need to validate its presence here
-            # if not req.images_dir:
-            #     logger.error(f"Missing images_dir path in cached request {req_id}. Skipping.")
-            #     continue
+        while remaining_ids:
+            reqs_to_process: List[ConversionRequest] = []
 
-            reqs_to_process.append(req)
+            # Reload current state for all remaining requests
+            for req_id in list(remaining_ids):
+                req = self.cache.get(req_id)
+                if not req:
+                    logger.debug(
+                        f"Request {req_id} no longer in cache; assuming it was cleaned up."
+                    )
+                    remaining_ids.remove(req_id)
+                    continue
 
-        if not reqs_to_process:
-            logger.warning(
-                "No valid requests found in cache to process after validation."
+                if not req.target_file:
+                    logger.error(
+                        f"Missing target_file path in cached request {req_id}. Skipping."
+                    )
+                    remaining_ids.remove(req_id)
+                    continue
+
+                if req.status in (Status.FAILED, Status.COMPLETE):
+                    # Ensure cleanup runs for terminal requests that might have been
+                    # left in the cache from a previous run.
+                    self._handle_single_request(req)
+                    remaining_ids.remove(req_id)
+                    continue
+
+                reqs_to_process.append(req)
+
+            if not reqs_to_process:
+                # Nothing left that is valid and non-terminal
+                break
+
+            pass_count += 1
+            total_pending = sum(len(req.pending_chunks) for req in reqs_to_process)
+            total_complete = sum(
+                len([c for c in req.chunks if c.status == Status.COMPLETE])
+                for req in reqs_to_process
             )
-            return
+            logger.info(
+                f"Pass {pass_count}: {len(reqs_to_process)} active request(s); "
+                f"{total_pending} pending chunk(s), {total_complete} complete chunk(s)."
+            )
+            with ProgressTracker(
+                len(reqs_to_process), "Processing requests"
+            ) as progress:
+                for req in reqs_to_process:
+                    self._handle_single_request(req)
+                    progress.update()
+            logger.info(
+                f"Finished processing pass {pass_count} for active requests."
+            )
 
-        logger.info(f"Starting processing for {len(reqs_to_process)} requests...")
-        with ProgressTracker(len(reqs_to_process), "Processing requests") as progress:
-            for req in reqs_to_process:
-                self._handle_single_request(req)
-                progress.update()
-        logger.info("Finished processing all requests.")
+            # Re-check if any requests remain after this pass
+            still_active = []
+            for req_id in remaining_ids:
+                req = self.cache.get(req_id)
+                if req and req.status not in (Status.FAILED, Status.COMPLETE):
+                    still_active.append(req_id)
+            remaining_ids = still_active
+
+            if not remaining_ids:
+                break
+
+            # Recompute earliest retry target after handling this pass, so sleep
+            # respects freshly updated per-chunk backoff state.
+            next_retry_at: float | None = None
+            for req_id in remaining_ids:
+                req = self.cache.get(req_id)
+                if not req:
+                    continue
+                for chunk in req.pending_chunks:
+                    if chunk.retry_after is not None and (
+                        next_retry_at is None or chunk.retry_after < next_retry_at
+                    ):
+                        next_retry_at = chunk.retry_after
+
+            # Determine how long to sleep before the next pass, based on the soonest
+            # per-chunk retry time. The actual retry timings are controlled solely
+            # by `_schedule_next_chunk_check`, via each chunk's `retry_after`.
+            sleep_for: float = self.check_interval
+            now = time.time()
+            if next_retry_at is not None and next_retry_at > now:
+                sleep_for = max(0.0, next_retry_at - now)
+
+            if sleep_for > 0:
+                logger.info(
+                    f"Active requests remain after pass {pass_count}; sleeping "
+                    f"{sleep_for:.2f}s before next status check."
+                )
+                time.sleep(sleep_for)
+
+        logger.info(
+            f"Result processing complete after {pass_count} pass(es); "
+            "all tracked requests are now in a terminal state or have been cleaned up."
+        )
 
     def _handle_single_request(self, req: ConversionRequest) -> None:
-        """Handles the processing state for a single conversion request."""
         logger.debug(
-            f"Handling request {req.request_id} for {req.original_file.name} (Status: {req.status})"
+            f"Handling request {req.request_id} for {req.original_file.name} "
+            f"(status={req.status}, pending_chunks={len(req.pending_chunks)})"
         )
         try:
             if req.status in (Status.FAILED, Status.COMPLETE):
@@ -340,7 +377,7 @@ class ResultHandler:
                 self._cleanup_request(req)
             else:
                 logger.debug(
-                    f"Request {req.request_id} still processing after check. Will retry later."
+                    f"Request {req.request_id} still processing after check; it will be revisited in a later polling cycle."
                 )
                 self.cache.save(req)
 
@@ -361,15 +398,21 @@ class ResultHandler:
     def _poll_and_save_pending_chunks(
         self, req: ConversionRequest, chunks: List[ChunkInfo]
     ) -> None:
-        """Polls the API for the status of pending chunks and saves results if complete."""
         if not chunks:
             return
         logger.info(
-            f"Polling status for {len(chunks)} pending chunk(s) of {req.original_file.name}"
+            f"Polling status for request {req.request_id}: "
+            f"{len([c for c in chunks if c.retry_after is None or c.retry_after <= time.time()])} "
+            f"ready chunk(s), {len(chunks)} total pending."
         )
+        now = time.time()
 
         with ProgressTracker(len(chunks), "Checking chunk status") as progress:
             for chunk in chunks:
+                if chunk.retry_after is not None and now < chunk.retry_after:
+                    progress.update()
+                    continue
+
                 if self._poll_and_process_single_chunk(
                     chunk, req
                 ):  # Returns True if chunk failed
@@ -386,10 +429,27 @@ class ResultHandler:
                 progress.update()
         self.cache.save(req)
 
+    def _schedule_next_chunk_check(self, chunk: ChunkInfo) -> None:
+        attempts = max(chunk.retry_attempts, 0)
+        effective_attempt = min(attempts, max(CHUNK_RETRY_MAX_ATTEMPTS - 1, 0))
+        delay = CHUNK_RETRY_INITIAL_DELAY_SECONDS * (
+            CHUNK_RETRY_BACKOFF_FACTOR ** effective_attempt
+        )
+        if delay > CHUNK_RETRY_MAX_DELAY_SECONDS:
+            delay = CHUNK_RETRY_MAX_DELAY_SECONDS
+
+        chunk.retry_attempts = attempts + 1
+        chunk.retry_after = time.time() + delay
+
     def _poll_and_process_single_chunk(
         self, chunk: ChunkInfo, req: ConversionRequest
     ) -> bool:
-        """Polls API status for one chunk, saves result if complete. Returns True if chunk failed."""
+        """Poll API status for one chunk and save the result if complete.
+
+        Per-chunk exponential backoff is handled via `retry_attempts` and
+        `retry_after` on `ChunkInfo`, so this method performs a single status
+        check and schedules the next one when needed.
+        """
         if chunk.status != Status.PROCESSING:
             logger.warning(
                 f"Attempting to process chunk {chunk.index} not in PROCESSING state ({chunk.status}) for request {req.request_id}"
@@ -397,81 +457,63 @@ class ResultHandler:
             return chunk.status == Status.FAILED
 
         if not req.tmp_dir or not chunk.request_id:
-            error_msg = f"Invalid state for processing chunk {chunk.index} (req_id: {req.request_id}): Missing tmp_dir or chunk.request_id."
+            error_msg = (
+                f"Invalid state for processing chunk {chunk.index} (req_id: {req.request_id}): "
+                f"Missing tmp_dir or chunk.request_id."
+            )
             logger.error(error_msg)
             chunk.mark_failed(error_msg)
             return True
 
-        max_retries = 5
-        retry_count = 0
-        is_failed = False
+        # Enforce a hard cap on polling attempts for this chunk.
+        if chunk.retry_attempts >= CHUNK_RETRY_MAX_ATTEMPTS:
+            msg = (
+                f"Chunk {chunk.request_id} did not complete after "
+                f"{CHUNK_RETRY_MAX_ATTEMPTS} polling attempts; marking as failed."
+            )
+            logger.error(msg)
+            chunk.mark_failed(msg)
+            return True
+
+        status: MarkerStatus | None = self.client.check_status(chunk.request_id)
+
+        if status is None:
+            logger.debug(
+                f"No status available for chunk {chunk.request_id}; scheduling next check."
+            )
+            self._schedule_next_chunk_check(chunk)
+            return False
+
+        if status.status == StatusEnum.FAILED:
+            logger.error(
+                f"Chunk {chunk.request_id} failed on API. Error: {status.error}"
+            )
+            chunk.mark_failed(status.error or "Unknown API error")
+            return True
+
+        if status.status == StatusEnum.COMPLETE:
+            logger.debug(f"Chunk {chunk.request_id} complete, saving result.")
+            try:
+                self._save_chunk_result(chunk, status, req)
+                chunk.mark_complete()
+            except Exception as save_e:
+                logger.error(
+                    f"Failed to save result for completed chunk {chunk.request_id}: {save_e}",
+                    exc_info=True,
+                )
+                chunk.mark_failed(f"Failed to save result: {str(save_e)}")
+                return True
+            return False
 
         logger.debug(
-            f"Checking status for chunk {chunk.index} (ID: {chunk.request_id}) [{retry_count}/{max_retries}]..."
-            if retry_count > 0
-            else f"Checking status for chunk {chunk.index} (ID: {chunk.request_id})..."
+            f"Chunk {chunk.request_id} not yet complete (status={status.status}); scheduling next check."
         )
-        while retry_count < max_retries:
-            status = None
-            try:
-                status = self.client.check_status(chunk.request_id)
-            except Exception as api_e:
-                logger.error(
-                    f"API client error checking status for chunk {chunk.request_id}: {api_e}"
-                )
-
-            if status is None:
-                logger.warning(
-                    f"Received no status for chunk {chunk.request_id}. Retrying in {self.check_interval}s ({retry_count+1}/{max_retries})..."
-                )
-            elif status.status == StatusEnum.FAILED:
-                logger.error(
-                    f"Chunk {chunk.request_id} failed on API. Error: {status.error}"
-                )
-                chunk.mark_failed(status.error or "Unknown API error")
-                is_failed = True
-                break
-            elif status.status == StatusEnum.COMPLETE:
-                logger.debug(f"Chunk {chunk.request_id} complete. Saving result...")
-                try:
-                    self._save_chunk_result(chunk, status, req)
-                    # Mark complete *only after* saving result successfully
-                    chunk.mark_complete()
-                    logger.debug(
-                        f"Successfully saved result for chunk {chunk.request_id}."
-                    )
-                except Exception as save_e:
-                    logger.error(
-                        f"Failed to save result for completed chunk {chunk.request_id}: {save_e}",
-                        exc_info=True,
-                    )
-                    chunk.mark_failed(f"Failed to save result: {str(save_e)}")
-                    is_failed = True
-                break
-            elif status.status == StatusEnum.PROCESSING:
-                logger.debug(
-                    f"Chunk {chunk.request_id} still processing on API ({retry_count+1}/{max_retries})."
-                )
-            else:
-                logger.error(
-                    f"Received unexpected status '{status.status}' for chunk {chunk.request_id}. Treating as retryable."
-                )
-
-            # Wait before retrying if not in a terminal state
-            retry_count += 1
-            if retry_count >= max_retries:
-                logger.warning(
-                    f"Chunk {chunk.request_id} status check timed out after {max_retries} retries for this cycle."
-                )
-                break
-            time.sleep(self.check_interval)
-
-        return is_failed
+        self._schedule_next_chunk_check(chunk)
+        return False
 
     def _save_chunk_result(
         self, chunk: ChunkInfo, status: MarkerStatus, req: ConversionRequest
     ) -> None:
-        """Saves the content (markdown/json) and images from a completed API status response."""
         content = None
         if status.markdown is not None:
             content = status.markdown
@@ -490,9 +532,8 @@ class ResultHandler:
             raise ResultProcessingError(
                 f"Request temporary directory is not set for request {req.request_id}."
             )
-        # Add check for images_dir needed for processing images
         if status.images and req.images_dir is None:
-             raise ResultProcessingError(
+            raise ResultProcessingError(
                 f"Request final images directory is not set for request {req.request_id}, but images were received."
             )
 
@@ -501,7 +542,6 @@ class ResultHandler:
 
         image_map = {}
         if status.images:
-            # Pass the final images directory path to _process_chunk_images
             image_map = self._process_chunk_images(
                 status.images, chunk, req.tmp_dir, req.chunk_size, req.images_dir
             )
@@ -510,8 +550,6 @@ class ResultHandler:
                     f"Replacing {len(image_map)} image references in content for chunk {chunk.index}"
                 )
                 for original_name, new_ref in image_map.items():
-                    # Simple replace; assumes API format ](original_name)
-                    # new_ref now correctly contains "images_xyz123abc/page_1_fig_1.jpg"
                     content = content.replace(f"]({original_name})", f"]({new_ref})")
 
         logger.debug(
@@ -520,7 +558,6 @@ class ResultHandler:
         self.saver.save_content(content, temp_file)
 
     def _combine_and_save_result(self, req: ConversionRequest) -> None:
-        """Combines temporary results and saves to the final target file."""
         try:
             if not req.target_file or not req.tmp_dir:
                 raise ResultProcessingError(
@@ -532,7 +569,7 @@ class ResultHandler:
             logger.debug(
                 f"Successfully combined results for {req.request_id} to {output_file} ({total_size} bytes)"
             )
-            print(f"Successfully saved output to {output_file}")
+            logger.info(f"Successfully saved output to {output_file}")
 
             req.set_status(Status.COMPLETE)
             self.cache.save(req)
@@ -547,17 +584,11 @@ class ResultHandler:
             raise  # Propagate error to _handle_single_request
 
     def _move_final_images(self, req: ConversionRequest) -> None:
-        """Moves images from temp dir to final location if they exist."""
-        # Always attempt to move if the source directory exists, regardless of the initial config setting.
-        # If images were not extracted (or API respected the flag), the source dir won't exist.
-        if (
-            req.tmp_dir and req.target_file and req.images_dir
-        ):  # Check for existence of all needed paths
+        if req.tmp_dir and req.target_file and req.images_dir:
             source_images_dir = req.tmp_dir / "images"
             if source_images_dir.exists():
                 logger.debug(f"Moving final images for request {req.request_id}...")
                 try:
-                    # Pass the final determined images dir path from the request
                     self.saver.move_images(source_images_dir, req.images_dir)
                     logger.debug(
                         f"Successfully moved images for request {req.request_id}. Source temp dir will be cleaned up."
@@ -571,12 +602,12 @@ class ResultHandler:
                     f"No temporary images directory found at {source_images_dir} for request {req.request_id}. Nothing to move."
                 )
         else:
-            logger.warning(
-                f"Cannot move images for request {req.request_id}: Missing temp dir, target file path, or determined images_dir path."
+            logger.debug(
+                f"Skipping image move for request {req.request_id}: "
+                "missing temp dir, target file path, or images directory."
             )
 
     def _cleanup_request(self, req: ConversionRequest) -> None:
-        """Cleans up temporary directory and cache entry for a request."""
         req_id = req.request_id
         logger.debug(
             f"Cleaning up resources for request {req_id} (Original: {req.original_file.name})..."
@@ -602,5 +633,3 @@ class ResultHandler:
             logger.error(
                 f"Error during cleanup for request {req_id}: {e}", exc_info=False
             )
-
-    # __enter__ / __exit__ removed
