@@ -1,110 +1,140 @@
-# PDF to Markdown CLI - Agent Documentation
+# PDF to Markdown CLI agent guide
 
-## Repository Purpose
+This file is the compact implementation map for agents working in this repository. Keep it accurate when behavior, commands, package structure, or supported formats change.
 
-CLI utility that wraps Datalab Marker API to convert PDFs and other supported documents (Word, PowerPoint, spreadsheets, EPUB, HTML, images) into Markdown/JSON/HTML via `docs_to_md` package. Published as "pdf-to-markdown-cli" on PyPI (current version 0.5.2).
+## Project summary
 
-## Supported Formats
+`pdf-to-markdown-cli` is a Python 3.10+ CLI package that wraps the Datalab Marker API.
 
-**Input formats:**
+Primary command:
 
-- PDF
-- Word (.doc/.docx)
-- PowerPoint (.ppt/.pptx)
-- Spreadsheets (.xls/.xlsx/.ods)
-- EPUB, HTML
-- Images (.png/.jpg/.jpeg/.webp/.gif/.tiff)
+```bash
+pdf-to-md <input-file-or-directory> [options]
+```
 
-**Output formats:**
+Equivalent module entrypoint:
 
-- Markdown (.md)
-- JSON
-- HTML
+```bash
+python -m docs_to_md <input-file-or-directory> [options]
+```
 
-## Package Layout (26 Python files total)
+The CLI converts supported files to Markdown by default, or to JSON/HTML when requested. It handles discovery, PDF chunking, API submission, polling, output assembly, image extraction, and cleanup.
 
-- `src/docs_to_md/__main__.py`: module entry point via `sys.exit(main())`
-- `src/docs_to_md/main.py`: console entrypoint with error handling, configuring logging and invoking MarkerProcessor
-- `config/cli.py`: argparse-based CLI parsing with --version support, environment validation (MARKER_PDF_KEY); builds Config dataclass defined in config/settings.py. Supports --max flag for all enhancements
-- `config/settings.py`: Config dataclass with validation, default paths `~/.docs_to_md/{cache,tmp}`, chunk_size=25 default
-- `core/processor.py`: MarkerProcessor orchestrates job discovery, chunked submission via BatchProcessor, result polling, and cleanup. Uses ResultHandler for polling & assembly, and core/paths.py for deterministic output locations with collision avoidance
-- `core/result_handler.py`: handles API polling, result combination, image extraction/rewriting, and final file output
-- `api/client.py`: MarkerClient with rate limiting (150 req/min), exponential backoff, timeout handling, and filetype detection
-- `api/models.py`: Pydantic schemas (MarkerStatus, SubmitResponse), supported format mappings, and API parameter definitions
-- `storage/cache.py` & `storage/models.py`: CacheManager using diskcache for persistence of ConversionRequest/Status across runs
-- `utils/file_utils.py`: FileDiscovery, TemporaryDirectory, FileIO, and get_unique_filename for collision handling
-- `utils/pdf_splitter.py`: chunk_pdf_to_temp using pikepdf
-- `utils/logging.py`: ProgressTracker with tqdm, setup_logging
-- `utils/exceptions.py`: custom exception hierarchy
+## Source of truth
 
-## Execution Flow
+- Package metadata and dependencies: `pyproject.toml`.
+- CLI arguments: `src/docs_to_md/config/cli.py`.
+- Runtime config validation: `src/docs_to_md/config/settings.py`.
+- Supported extensions and MIME types: `src/docs_to_md/api/models.py`.
+- Marker API behavior reference: `datalab_marker_api_docs.md` (do not edit casually; it is copied API documentation).
+- User-facing docs: `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`.
 
-1. User invokes CLI (`pdf-to-md` script or `python -m docs_to_md`)
-2. CLI parses args, reads MARKER_PDF_KEY, validates inputs, and instantiates MarkerProcessor
-3. Processor discovers processable files, determines output/asset paths, and submits each file (chunked PDFs via chunk_pdf_to_temp)
-4. Requests and chunk metadata persist via CacheManager
-5. ResultHandler polls Marker API until chunks finish, saves markdown/JSON assets, rewrites image references, moves image outputs, and cleans temporary data
+## Supported formats
 
-## Running & Configuration
+Input extensions:
 
-**Requirements:**
+- PDF: `.pdf`
+- Word: `.doc`, `.docx`, `.odt`
+- PowerPoint: `.ppt`, `.pptx`, `.odp`
+- Spreadsheets: `.xls`, `.xlsx`, `.ods`
+- Web and ebook: `.html`, `.epub`
+- Images: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tiff`
 
-- Python ≥3.10
-- Dependencies from pyproject.toml: `backoff>=2.0`, `diskcache>=5.0`, `filetype>=1.0`, `pikepdf>=8.0`, `pydantic>=2.0`, `ratelimit>=2.0`, `requests>=2.0`, `tqdm>=4.0`
-- Environment variable `MARKER_PDF_KEY` must be set for API auth (obtain from https://www.datalab.to/app/keys)
+Output formats:
 
-**Installation:**
+- `markdown` -> `.md`
+- `json` -> `.json`
+- `html` -> `.html`
 
-- `pip install pdf-to-markdown-cli` OR `pip install -e .`
-- Console script: `pdf-to-md` defined in pyproject.toml → `docs_to_md.main:main`
+## Runtime requirements
 
-**Usage:**
+- Python >= 3.10.
+- `MARKER_PDF_KEY` must be set before running the CLI.
+- Main dependencies: `backoff`, `diskcache`, `filetype`, `pikepdf`, `pydantic`, `ratelimit`, `requests`, `tqdm`.
+- Datalab Marker endpoint: `https://www.datalab.to/api/v1/marker`.
+- Client-side API limits in code: 150 requests/minute, 30 second request timeout, 3 retry attempts.
 
-- `pdf-to-md <input-path> [options]` or `python -m docs_to_md <input-path> [options]`
+## Package map
 
-**Key CLI options:**
+- `src/docs_to_md/__main__.py`: module entrypoint that exits with `main()`.
+- `src/docs_to_md/main.py`: console entrypoint, early verbose parsing, logging setup, top-level error handling.
+- `src/docs_to_md/config/cli.py`: `argparse` parser, `--version`, `MARKER_PDF_KEY` lookup, `Config` creation.
+- `src/docs_to_md/config/settings.py`: `Config` dataclass, input/output validation, cache/tmp directory setup with temp-dir fallback.
+- `src/docs_to_md/api/client.py`: Marker submit/status calls, MIME detection, rate limiting, retries, request timeout.
+- `src/docs_to_md/api/models.py`: API response models, API params, supported input/output mappings.
+- `src/docs_to_md/core/paths.py`: output file and image directory naming with short UUID keys.
+- `src/docs_to_md/core/processor.py`: file discovery, job preparation, PDF chunk submission, result workflow orchestration.
+- `src/docs_to_md/core/result_handler.py`: polling loop, per-chunk backoff, chunk result saving, image reference rewriting, final assembly, cleanup.
+- `src/docs_to_md/storage/cache.py`: diskcache wrapper for conversion request state.
+- `src/docs_to_md/storage/models.py`: `ConversionRequest`, `ChunkInfo`, and status state transitions.
+- `src/docs_to_md/utils/file_utils.py`: file discovery, safe deletion, directory creation, file IO helpers.
+- `src/docs_to_md/utils/pdf_splitter.py`: PDF chunk creation with `pikepdf`.
+- `src/docs_to_md/utils/logging.py`: root logging setup and `tqdm` progress wrapper.
+- `src/docs_to_md/utils/exceptions.py`: project exception hierarchy.
 
-- `--json` (JSON output)
-- `--langs "English,French"` (OCR languages)
-- `--llm` (LLM enhancement)
-- `--max` (all enhancements)
-- `--chunk-size N`
-- `--no-chunk`
-- `-o /abs/output/path`
-- `--verbose`
-- `--version`
+## Execution flow
 
-**API constraints:**
+1. `main()` does a minimal parse for `-v`/`--verbose`, then configures logging.
+2. `create_config_from_args()` parses all arguments, reads `MARKER_PDF_KEY`, builds `Config`, and validates it.
+3. `MarkerProcessor` initializes `MarkerClient` and `CacheManager`.
+4. `FileDiscovery.find_processable_files()` accepts a single file or recursively scans a directory.
+5. `determine_output_paths()` creates the base output directory and assigns a short unique key.
+6. `BatchProcessor` chunks PDFs when needed and submits every chunk or file to Marker.
+7. `ResultHandler` polls chunk request IDs until completion or failure.
+8. Completed chunk results are written to temporary files, images are decoded and references are rewritten.
+9. Chunk outputs are combined into the final target file.
+10. Temporary directories and cache entries are cleaned up for terminal requests.
 
-- 150 req/min rate limit
-- 200MB file size limit
-- 200 concurrent request limit
-- 30s timeout
-- 3 retry attempts
+## Output behavior
 
-**Output behavior:**
+- Default output directory: same directory as the input file.
+- Custom output directory: `-o`/`--output-dir`, and it must be absolute.
+- Output file pattern: `<input_stem>_<unique_key>.<extension>`.
+- Image directory pattern: `images_<unique_key>/`.
+- Image directories are created only if Marker returns images.
+- Markdown image references are rewritten to point at `images_<unique_key>/<image_name>`.
 
-- Outputs placed alongside input by default with unique suffix (\_1, \_2, etc.) for collision avoidance
-- Image assets stored under `images_<unique_key>/` directory
-- Results auto-deleted from Datalab servers after 1 hour
+## CLI options
 
-## Testing & Verification
+- `input`: required file or directory.
+- `--json`: request JSON output.
+- `--html`: request HTML output.
+- `-l`, `--langs`: comma-separated OCR languages, default `English`.
+- `--llm`: use Marker LLM enhancement.
+- `--strip`: strip existing OCR and redo OCR.
+- `--noimg`: disable image extraction.
+- `--force`: force OCR on every page.
+- `--pages`: add page delimiters.
+- `-mp`, `--max-pages`: process only the first `N` pages.
+- `--max`: equivalent to `--llm --strip --force`.
+- `--no-chunk`: uses a very large chunk size to avoid practical chunking.
+- `-cs`, `--chunk-size`: PDF pages per chunk, default `25`.
+- `-o`, `--output-dir`: absolute output directory.
+- `-v`, `--verbose`: debug logging.
+- `--version`: installed package version.
 
-- Test suite uses unittest in `tests/` directory (4 test files)
-- Execute via `python -m unittest discover -s tests -v`
-- Tests cover CLI config parsing (`test_cli.py`), output path determination (`test_paths.py`), config validation (`test_settings.py`), and utility helpers (`test_utils.py`)
-- No integration tests with live API
-- **NOTE:** Tests run via `python -m unittest discover -s tests -v` in a configured environment with package dependencies installed.
+## Testing
 
-## File Structure & Examples
+Run all tests:
 
-- `examples/` contains sample PDFs and their converted outputs: `alice_in_wonderland_sample.pdf` with both default and LLM versions, `equations.pdf` demonstrating math processing, associated `images/`
-- `dist/` contains built packages from prior releases as both wheels (.whl) and source distributions (.tar.gz)
-- `pyproject.toml` defines modern Python packaging with setuptools, entry points, dependencies, and metadata for PyPI publishing
+```bash
+python -m unittest discover -s tests -v
+```
 
-## Additional Notes
+Current tests cover:
 
-- Cache/temp dirs default to `~/.docs_to_md/{cache,tmp}`; cleaned after successful runs via CacheManager and TemporaryDirectory context mgrs
-- Project currently has many uncommitted changes (40+ modified files) including all source code, examples, and configuration files
-- Supported file extensions: `.pdf`, `.xls/.xlsx/.ods`, `.doc/.docx/.odt`, `.ppt/.pptx/.odp`, `.html`, `.epub`, `.png/.jpg/.jpeg/.webp/.gif/.tiff`
-- API endpoint: `https://www.datalab.to/api/v1/marker` with polling model
+- CLI config parsing and HTML config selection in `tests/test_cli.py`.
+- Output path generation in `tests/test_paths.py`.
+- Config validation and writable cache fallback in `tests/test_settings.py`.
+- File utility and image directory behavior in `tests/test_utils.py`.
+- Mocked processing of bundled example PDFs in `tests/test_cli_equations.py`.
+
+There are no live Datalab integration tests.
+
+## Documentation rules for agents
+
+- Keep docs aligned with code before making them more promotional.
+- Do not claim resumable conversions unless a resume command or startup cache replay exists.
+- Describe output names as UUID-keyed, not `_1`, `_2` collision suffixes.
+- Treat `examples/*.md` as generated conversion outputs, not hand-authored docs.
+- Leave `datalab_marker_api_docs.md` unchanged unless the task is specifically to refresh copied Datalab docs.
