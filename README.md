@@ -17,9 +17,9 @@
 
 ```console
 $ pdf-to-md books/
-✓ darwin_origin_of_species_1859.pdf → darwin_origin_of_species_1859.md (516 pages, $1.55)
-✓ tolstoy_voina_i_mir_t1_1937.pdf → tolstoy_voina_i_mir_t1_1937.md (537 pages, $1.61)
-✓ grimm_kinder_und_hausmaerchen_1857.pdf → grimm_kinder_und_hausmaerchen_1857.md (510 pages, $1.53)
+✓ darwin_1859.pdf → darwin_1859.md (516 pages, $1.55)
+✓ tolstoy_1869.pdf → tolstoy_1869.md (537 pages, $1.61)
+✓ grimm_1857.pdf → grimm_1857.md (510 pages, $1.53)
 Done in 4m37s: 3 converted · 1563 pages · $4.69
 ```
 
@@ -39,9 +39,9 @@ Done in 4m37s: 3 converted · 1563 pages · $4.69
 Requires Python 3.10 or newer.
 
 ```bash
-pipx install pdf-to-markdown-cli        # recommended: isolated install
-uv tool install pdf-to-markdown-cli     # or with uv
-pip install pdf-to-markdown-cli         # or into the current environment
+pipx install pdf-to-markdown-cli     # recommended
+uv tool install pdf-to-markdown-cli  # or with uv
+pip install pdf-to-markdown-cli      # or with pip
 ```
 
 Then get an API key from [datalab.to/app/keys](https://www.datalab.to/app/keys) and export it:
@@ -61,10 +61,10 @@ This writes `report.md` next to the PDF, plus a `report_images/` folder if the d
 ## Recipes
 
 ```bash
-# Convert a whole folder tree into a separate output folder, keeping its structure
+# Convert a folder tree into a separate, mirrored output folder
 pdf-to-md ~/papers -o ~/papers-md
 
-# Preview what would happen (files, pages, chunks) without spending credits
+# Preview files, pages, and chunks without spending credits
 pdf-to-md ~/papers --dry-run
 
 # Best quality for difficult scans, tables, and handwriting
@@ -94,7 +94,7 @@ pdf-to-md ~/papers -q | xargs wc -w
 
 ```mermaid
 flowchart LR
-    A[Inputs: files and folders] --> B[Plan outputs<br/>skip finished files]
+    A[Files and folders] --> B[Plan outputs<br/>skip finished]
     B --> C[Split PDFs into<br/>page chunks]
     C --> D[Upload chunks<br/>in parallel]
     D --> E[Poll with backoff<br/>retry transient errors]

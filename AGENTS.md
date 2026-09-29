@@ -54,8 +54,8 @@ It discovers inputs, plans deterministic output paths, and splits PDFs into page
 
 ```bash
 pip install -e ".[dev]"
-pytest --cov                          # offline suite; never calls the API
-DATALAB_API_KEY=... pytest -m live    # opt-in end-to-end suite (a few cents)
+pytest --cov                        # offline; no API calls
+DATALAB_API_KEY=... pytest -m live  # real API, a few cents
 ruff check . && ruff format --check .
 ```
 

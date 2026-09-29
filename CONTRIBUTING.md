@@ -23,9 +23,9 @@ pip install -e ".[dev]"
 CI runs these on Linux, macOS, and Windows for every supported Python version. Run them before opening a pull request:
 
 ```bash
-pytest --cov              # unit and integration tests; never calls the API
-ruff check .              # lint
-ruff format --check .     # formatting (run `ruff format .` to fix)
+pytest --cov           # full offline suite; never calls the API
+ruff check .           # lint
+ruff format --check .  # formatting (`ruff format .` fixes it)
 ```
 
 ### Live API tests
@@ -42,19 +42,19 @@ Maintainers can also run them from the **Live API tests** workflow in the Action
 
 ```text
 src/docs_to_md/
-├── cli.py         argument parsing, entry point, exit codes, run summary
-├── config.py      validated runtime configuration
-├── discovery.py   input discovery and deterministic output planning
-├── pipeline.py    splitting, concurrent submission, polling, per-file results
-├── client.py      Datalab Convert API client: retries, timeouts, error types
-├── models.py      API request/response types and supported formats
-├── pdf.py         page-range parsing and PDF splitting (pikepdf)
-├── assemble.py    merging chunk outputs, renumbering pages, images, atomic writes
-├── markdown.py    Markdown clean-up (line reflow, duplicate captions)
-├── console.py     terminal output, progress bar, logging
-└── errors.py      exception hierarchy
-tests/             pytest suite, plus samples.py (the manifest of examples/)
-examples/          sample documents with reference outputs (see examples/README.md)
+├── cli.py        arguments, entry point, exit codes, summary
+├── config.py     validated runtime configuration
+├── discovery.py  input discovery, deterministic output names
+├── pipeline.py   split, submit concurrently, poll, report
+├── client.py     API client: retries, timeouts, error types
+├── models.py     API request/response types, formats
+├── pdf.py        page ranges and PDF splitting (pikepdf)
+├── assemble.py   merge chunks, renumber pages, write files
+├── markdown.py   Markdown clean-up (reflow, captions)
+├── console.py    terminal output, progress bar, logging
+└── errors.py     exception hierarchy
+tests/            pytest suite; samples.py lists examples/
+examples/         sample documents with reference outputs
 ```
 
 ## Conventions
