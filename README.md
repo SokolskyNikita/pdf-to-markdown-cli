@@ -6,10 +6,9 @@
 
 <p align="center">
   <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/pypi/v/pdf-to-markdown-cli.svg" alt="PyPI"></a>
-  <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/pypi/pyversions/pdf-to-markdown-cli.svg" alt="Python versions"></a>
+  <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml"><img src="https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/releases"><img src="https://img.shields.io/github/v/release/SokolskyNikita/pdf-to-markdown-cli" alt="GitHub release"></a>
-  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
 </p>
 
@@ -113,8 +112,8 @@ flowchart LR
 ```text
 papers/
 ├── report.pdf
-├── report.md          ← converted document
-└── report_images/     ← extracted images (only if there are any)
+├── report.md        ← converted document
+└── report_images/   ← images, if any
 ```
 
 - If two inputs would produce the same name (`a.pdf` and `a.docx`), both keep their source extension: `a.pdf.md` and `a.docx.md`. Names are compared case-insensitively, and an output never overwrites an input.
@@ -151,14 +150,14 @@ Throughput depends on your plan's limits. With the default of 5 concurrent reque
 
 [`examples/`](https://github.com/SokolskyNikita/pdf-to-markdown-cli/tree/main/examples) holds sample documents next to their actual output from this tool:
 
-| Sample | Language | What it tests | Output |
-| --- | --- | --- | --- |
-| Alice in Wonderland | English | Illustrated novel, curly quotes | [Markdown](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/alice_in_wonderland_sample.md) |
-| Algebraic geometry notes | English | Mathematics rendered as LaTeX | [Markdown](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/equations.md) |
-| *On the Origin of Species* (1859) | English | Old scan with the fold-out tree diagram | [Markdown](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/darwin_origin_of_species_en.md) |
-| *War and Peace*, 1937 edition | Russian | Cyrillic mixed with French, footnotes, margin line numbers | [Markdown](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/tolstoy_war_and_peace_ru.md) |
-| *Kinder- und Hausmärchen* (1857) | German | Fraktur blackletter typeface | [Markdown](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/grimm_fairy_tales_de.md) |
-| *Shijing Gupu* (1908) | Chinese | Vertical right-to-left text and music notation | [Markdown](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/shijing_gupu_zh.md) |
+| Sample (links to output) | Language | What it tests |
+| --- | --- | --- |
+| [Alice in Wonderland](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/alice_in_wonderland_sample.md) | English | Illustrated novel, curly quotes |
+| [Algebraic geometry notes](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/equations.md) | English | Mathematics rendered as LaTeX |
+| [*Origin of Species* (1859)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/darwin_origin_of_species_en.md) | English | Old scan, fold-out tree diagram |
+| [*War and Peace* (1937 ed.)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/tolstoy_war_and_peace_ru.md) | Russian | Cyrillic mixed with French, footnotes |
+| [*Grimm's Fairy Tales* (1857)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/grimm_fairy_tales_de.md) | German | Fraktur blackletter typeface |
+| [*Shijing Gupu* (1908)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/shijing_gupu_zh.md) | Chinese | Vertical text, music notation |
 
 See [examples/README.md](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/README.md) for sources and how the samples are used in tests.
 
@@ -174,7 +173,7 @@ pdf-to-md INPUT [INPUT ...] [options]
 
 | Option | Description |
 | --- | --- |
-| `-f`, `--format {markdown,html,json}` | Output format. Default: `markdown`. `--html` and `--json` are shortcuts. |
+| `-f`, `--format FMT` | `markdown` (default), `html`, or `json`. `--html` and `--json` are shortcuts. |
 | `-o`, `--output-dir DIR` | Write here instead of next to each input. Folder structure under directory inputs is mirrored. |
 | `--overwrite` | Replace existing outputs instead of skipping those inputs. |
 | `--keep-line-breaks` | Keep hard-wrapped paragraph lines in Markdown. |
@@ -183,7 +182,7 @@ pdf-to-md INPUT [INPUT ...] [options]
 
 | Option | Description |
 | --- | --- |
-| `-m`, `--mode {fast,balanced,accurate}` | Quality versus speed and cost. Default: the API's (`fast`). |
+| `-m`, `--mode MODE` | `fast` (the API default), `balanced`, or `accurate`. |
 | `--paginate` | Insert page separators. |
 | `--no-images` | Don't extract images. |
 | `--no-image-captions` | Don't generate image descriptions. |
@@ -228,7 +227,7 @@ Because finished files are skipped, the simplest way to retry failures in an int
 
 | Variable | Purpose |
 | --- | --- |
-| `DATALAB_API_KEY` | API key, the same variable Datalab's official SDK uses. `MARKER_PDF_KEY` (from versions before 1.0) also works. `--api-key` takes precedence over both. |
+| `DATALAB_API_KEY` | API key, the same variable Datalab's SDK uses. The pre-1.0 name `MARKER_PDF_KEY` also works. `--api-key` overrides both. |
 | `NO_COLOR` | Disable colored output. |
 
 The tool keeps no state between runs. Temporary chunk files live in the system temp directory and are deleted when the run ends.
@@ -240,7 +239,7 @@ The tool keeps no state between runs. Temporary chunk files live in the system t
 | `No API key found` | Set `DATALAB_API_KEY`. |
 | `Authentication failed` | The key was rejected. Check it on the [Datalab dashboard](https://www.datalab.to/app/keys). |
 | `Payment required` | Your Datalab account is out of credits. |
-| `... exists (use --overwrite)` | The output is already there. Add `--overwrite` to redo it. |
+| `exists (use --overwrite)` | The output is already there. Add `--overwrite` to redo it. |
 | `timed out` | A request took longer than `--timeout`. Raise it, or lower `--chunk-size`. |
 | Frequent throttling | You're above your plan's limits (the free tier allows 10 requests per minute). Lower `-j`. |
 
