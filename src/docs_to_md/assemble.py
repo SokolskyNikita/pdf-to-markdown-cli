@@ -27,6 +27,7 @@ OUTPUT_EXTENSIONS: dict[str, str] = {
     "json": ".json",
 }
 
+_MD_PAGE_DASHES = "-" * 48
 _MD_PAGE_MARKER = re.compile(r"^\{(\d+)\}(-{48})$", re.MULTILINE)
 _HTML_PAGE_ID = re.compile(r'(data-page-id=")(\d+)(")')
 _BLOCK_ID = re.compile(r"(^|['\"])/page/(\d+)/")  # block ids and <content-ref src='/page/N/...'>
@@ -50,6 +51,19 @@ class ChunkOutput:
     images: dict[str, str] = field(default_factory=dict)  # name -> base64
     page_count: int = 0
     cost_cents: float = 0.0
+
+
+def join_pages(pages: list[str], output_format: str, paginate: bool) -> str:
+    """Combine per-page text using Marker's conventions, with chunk-local page numbers."""
+    if output_format == "html":
+        divs = "".join(
+            f'<div class="page" data-page-id="{i}">\n{page.strip()}\n</div>\n' for i, page in enumerate(pages)
+        )
+        head = '<head><meta charset="utf-8"/></head>'
+        return f"<!DOCTYPE html>\n<html>\n{head}\n<body>\n{divs}</body>\n</html>\n"
+    if paginate:
+        return "".join(f"\n\n{{{i}}}{_MD_PAGE_DASHES}\n\n{page.strip()}" for i, page in enumerate(pages))
+    return "\n\n".join(page.strip() for page in pages if page.strip())
 
 
 @dataclass

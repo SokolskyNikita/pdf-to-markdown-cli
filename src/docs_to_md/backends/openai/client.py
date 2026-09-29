@@ -123,13 +123,17 @@ class OpenAIClient:
 
     def create_response(self, body: dict[str, Any], what: str) -> dict[str, Any]:
         """POST /responses, retrying transient failures, and return the payload."""
+        return self.post("/responses", body, what)
+
+    def post(self, path: str, body: dict[str, Any], what: str) -> dict[str, Any]:
+        """POST ``body`` as JSON to ``path``, retrying transient failures, and return the payload."""
         last_error: RetryableAPIError | None = None
         for attempt in range(MAX_ATTEMPTS):
             if self.stop_event.is_set():
                 raise Cancelled("Interrupted")
             try:
                 response = self._session.post(
-                    f"{self.base_url}/responses",
+                    f"{self.base_url}{path}",
                     json=body,
                     timeout=(CONNECT_TIMEOUT_SECONDS, self.timeout),
                 )

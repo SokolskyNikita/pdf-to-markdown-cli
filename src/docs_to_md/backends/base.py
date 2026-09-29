@@ -7,11 +7,12 @@ Markdown, HTML, or JSON.
 
 from __future__ import annotations
 
+import json
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from docs_to_md.assemble import ChunkOutput
 from docs_to_md.pdf import Chunk
@@ -21,6 +22,14 @@ if TYPE_CHECKING:
 
 CancelCheck = Callable[[], None]
 """Raises ``Cancelled`` once the run is interrupted or another chunk of the file failed."""
+
+
+def parse_option_value(value: str) -> Any:
+    """Decode an ``--api-option`` value for a JSON API: JSON if it parses, else the string."""
+    try:
+        return json.loads(value)
+    except ValueError:
+        return value
 
 
 @dataclass(frozen=True)

@@ -4,14 +4,14 @@ This file is the compact implementation map for agents working in this repositor
 
 ## Project summary
 
-`pdf-to-markdown-cli` is a Python 3.11+ CLI that converts documents to Markdown, HTML, or JSON with the Datalab Convert API (the default). It can also transcribe PDFs and images with OpenAI's GPT-Luna, called directly (`--backend openai`) or through OpenRouter (`--backend openrouter`).
+`pdf-to-markdown-cli` is a Python 3.11+ CLI that converts documents to Markdown, HTML, or JSON with the Datalab Convert API (the default). It can also OCR documents to Markdown with Mistral OCR (`--backend mistral`), or transcribe PDFs and images with OpenAI's GPT-Luna, called directly (`--backend openai`) or through OpenRouter (`--backend openrouter`).
 
 ```bash
 pdf-to-md INPUT [INPUT ...] [options]
 python -m docs_to_md INPUT [INPUT ...] [options]
 ```
 
-It discovers inputs, plans deterministic output paths, and splits PDFs into page chunks. It converts chunks concurrently through a conversion backend (`--backend`: `datalab`, `openai`, or `openrouter`), merges the chunk results (renumbering pages and renaming images), and writes the output atomically.
+It discovers inputs, plans deterministic output paths, and splits PDFs into page chunks. It converts chunks concurrently through a conversion backend (`--backend`: `datalab`, `mistral`, `openai`, or `openrouter`), merges the chunk results (renumbering pages and renaming images), and writes the output atomically.
 
 ## Source of truth
 
@@ -21,6 +21,7 @@ It discovers inputs, plans deterministic output paths, and splits PDFs into page
 - What each backend accepts (input extensions, output formats, modes, upload limit, API key variables): its `BackendInfo`, e.g. `DatalabBackend.info` in `src/docs_to_md/backends/datalab/backend.py`. Datalab MIME types: `src/docs_to_md/backends/datalab/models.py`.
 - Datalab API reference: <https://documentation.datalab.to/api-reference/> (also `https://documentation.datalab.to/llms.txt`).
 - OpenAI Responses API and file inputs: <https://developers.openai.com/api/docs/guides/file-inputs>. Append `.md` to any page URL for Markdown. Model prices: <https://developers.openai.com/api/docs/pricing.md>. OpenRouter's compatible API: <https://openrouter.ai/docs/api_reference/responses/overview.md>.
+- Mistral OCR guide: <https://docs.mistral.ai/studio/document-processing/basic_ocr.md> (index at `https://docs.mistral.ai/llms.txt`), OpenAPI spec: <https://docs.mistral.ai/openapi.yaml>, prices: <https://mistral.ai/pricing>.
 - User-facing docs: `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`.
 
 ## Module map (`src/docs_to_md/`)
@@ -34,11 +35,14 @@ It discovers inputs, plans deterministic output paths, and splits PDFs into page
 - `backends/datalab/backend.py`: `DatalabBackend` maps `Config` to Convert API fields (`options_for()`; page selection is sent only for documents uploaded whole), submits, polls with capped backoff until `--timeout`, and resubmits on page-rate-limit results.
 - `backends/datalab/client.py`: `DatalabClient.submit()` / `get_result()`. It uses per-thread `requests.Session` objects and retries 408/429/5xx/529 and network errors, honoring `Retry-After`. 401/403/402 raise `FatalAPIError`. It fetches `result_url` when results aren't inline. Sleeps wake on the shared `stop_event`.
 - `backends/datalab/models.py`: `ConvertOptions.to_form()`, `ConvertResult.from_payload()` (API fields `markdown`/`html`/`json`/`images`/`metadata`/`cost_breakdown`), `MODES`, and `INPUT_MIME_TYPES`.
-- `backends/openai/backend.py`: `OpenAIBackend` sends each chunk to the Responses API: PDFs as `input_file` at high detail, images as `input_image`. It asks for strict JSON with one string per page, retries once when the page count is wrong, and joins pages with Marker's page markers (`join_pages()`). `--mode` maps to reasoning effort. `OpenRouterBackend` subclasses it with OpenRouter's URL and key, an `openai/` model prefix, and a `file-parser` plugin pinned to the `native` engine.
-- `backends/openai/client.py`: `OpenAIClient.create_response()` with the same retry rules as the Datalab client. 401, 402, 403, `model_not_found`, and quota 429s raise `FatalAPIError`, except OpenRouter's content-policy 403, which fails only the file. A read timeout (`--timeout`) is not retried.
+- `backends/mistral/backend.py`: `MistralBackend` sends each chunk to `/v1/ocr` in one synchronous request: documents as `document_url`, images as `image_url`, both as base64 data URLs. Page selection (`pages`) is sent only for documents uploaded whole, and the API's page `index` numbers them. Pages are joined with `join_pages()`.
+- `backends/mistral/client.py`: `MistralClient` subclasses `OpenAIClient` for its session and retry loop and classifies Mistral's error bodies (`{"detail": ...}` or `{"object": "error", "message", "type"}`). 401, 402, 403, and `invalid_model` raise `FatalAPIError`.
+- `backends/mistral/models.py`: `OCRRequest.body()`, `parse_response()` (inlines `[tbl-N](tbl-N)` table placeholders, saves or drops `![img-N](img-N)` images), `requested_pages()`, `PRICES` per 1,000 pages, and `INPUT_MIME_TYPES`. Header and footer extraction is on except for OCR 3 (`KEEPS_HEADERS`), where it misplaces body text.
+- `backends/openai/backend.py`: `OpenAIBackend` sends each chunk to the Responses API: PDFs as `input_file` at high detail, images as `input_image`. It asks for strict JSON with one string per page, retries once when the page count is wrong, and joins pages with `join_pages()`. `--mode` maps to reasoning effort. `OpenRouterBackend` subclasses it with OpenRouter's URL and key, an `openai/` model prefix, and a `file-parser` plugin pinned to the `native` engine.
+- `backends/openai/client.py`: `OpenAIClient.create_response()` (a `post()` to `/responses`) with the same retry rules as the Datalab client. 401, 402, 403, `model_not_found`, and quota 429s raise `FatalAPIError`, except OpenRouter's content-policy 403, which fails only the file. A read timeout (`--timeout`) is not retried.
 - `backends/openai/models.py`: `INSTRUCTIONS` (the transcription prompt), `TranscribeRequest.body()`, `parse_response()`, and `cost_cents()`. Cost comes from OpenRouter's `usage.cost`, or from `PRICES` with long-context and service-tier multipliers.
 - `pdf.py`: `validate_page_range()`, `select_pages()`, `count_pages()`, `split_pdf()` → `Chunk(path, pages)`. Non-PDF documents become `Chunk(path)` with empty `pages`.
-- `assemble.py`: `OUTPUT_EXTENSIONS` and `ChunkOutput`, whose `content` uses Marker's conventions with chunk-local page numbers. `assemble()` merges `ChunkOutput`s. It renumbers Markdown `{N}----` markers, `page-N-M` anchors and links, HTML `data-page-id`, and JSON `/page/N/` ids, content-refs, and `page` fields. It also makes image names unique and URL-encodes image links. `write_document()` writes atomically and replaces old images.
+- `assemble.py`: `OUTPUT_EXTENSIONS` and `ChunkOutput`, whose `content` uses Marker's conventions with chunk-local page numbers. `assemble()` merges `ChunkOutput`s. It renumbers Markdown `{N}----` markers, `page-N-M` anchors and links, HTML `data-page-id`, and JSON `/page/N/` ids, content-refs, and `page` fields. It also makes image names unique and URL-encodes image links. `join_pages()` builds chunk content from per-page text for backends that return pages. `write_document()` writes atomically and replaces old images.
 - `markdown.py`: `remove_duplicate_captions()` drops paragraphs that repeat an image's alt text. `normalize_line_breaks()` joins hard-wrapped paragraphs and leaves structure alone.
 - `console.py`: `Console` (status lines to stderr, result paths to stdout, tqdm progress, `NO_COLOR`), `setup_logging()`, `format_cost()`, and `format_elapsed()`.
 - `errors.py`: `DocsToMdError` → `ConfigurationError`, `FileError`, `PDFProcessingError`, `APIError` (→ `RetryableAPIError`, `FatalAPIError`), `ResultProcessingError`, `Cancelled`.
@@ -49,14 +53,14 @@ It discovers inputs, plans deterministic output paths, and splits PDFs into page
 - Existing outputs (the file or the images folder) are skipped unless `--overwrite`.
 - stdout carries only converted output paths. Everything else goes to stderr.
 - Exit codes: `0` ok, `1` one or more files failed, `2` usage/config/auth error, `130` interrupted.
-- `datalab` is the default backend. GPT-Luna runs only when selected with `--backend`.
-- API key lookup order: `--api-key`, then the backend's `api_key_env_vars` (Datalab: `DATALAB_API_KEY`, `MARKER_PDF_KEY`; OpenAI: `OPENAI_API_KEY`; OpenRouter: `OPENROUTER_API_KEY`). Backends with no env vars need no key.
+- `datalab` is the default backend. Mistral and GPT-Luna run only when selected with `--backend`.
+- API key lookup order: `--api-key`, then the backend's `api_key_env_vars` (Datalab: `DATALAB_API_KEY`, `MARKER_PDF_KEY`; Mistral: `MISTRAL_API_KEY`; OpenAI: `OPENAI_API_KEY`; OpenRouter: `OPENROUTER_API_KEY`). Backends with no env vars need no key.
 - No state persists between runs. Temp files live in a `tempfile.TemporaryDirectory`.
 - Deprecated flags (`--llm`, `--max`, `--strip`, `--force`, `-l/--langs`, `--pages`, `--noimg`, `-cs`, `-mp`) stay accepted and hidden from `--help`.
 
 ## Supported formats
 
-- Inputs depend on the backend. Datalab: `INPUT_MIME_TYPES` in `backends/datalab/models.py` (PDF, Word/ODT, PowerPoint/ODP, Excel/ODS/CSV, HTML, EPUB, PNG/JPEG/WEBP/GIF/TIFF). OpenAI and OpenRouter: `INPUT_MIME_TYPES` in `backends/openai/models.py` (PDF, PNG/JPEG/WEBP/GIF), producing Markdown or HTML only.
+- Inputs depend on the backend. Datalab: `INPUT_MIME_TYPES` in `backends/datalab/models.py` (PDF, Word/ODT, PowerPoint/ODP, Excel/ODS/CSV, HTML, EPUB, PNG/JPEG/WEBP/GIF/TIFF). Mistral: `INPUT_MIME_TYPES` in `backends/mistral/models.py` (PDF, Word, PowerPoint, XLSX/CSV, ODT, and images including AVIF/HEIC/BMP), producing Markdown only. OpenAI and OpenRouter: `INPUT_MIME_TYPES` in `backends/openai/models.py` (PDF, PNG/JPEG/WEBP/GIF), producing Markdown or HTML only.
 - Outputs: `markdown` → `.md`, `html` → `.html`, `json` → `.json` (each backend declares the subset it supports).
 
 ## Development
@@ -65,16 +69,16 @@ It discovers inputs, plans deterministic output paths, and splits PDFs into page
 pip install -e ".[dev]"
 pytest --cov                        # offline; no API calls
 DATALAB_API_KEY=... pytest -m live  # real APIs, a few cents
-# OPENAI_API_KEY / OPENROUTER_API_KEY add the GPT-Luna live tests
+# MISTRAL_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY add the Mistral and GPT-Luna live tests
 ruff check . && ruff format --check .
 ```
 
 - `tests/conftest.py` provides `FakeBackend` (synchronous in-memory backend for pipeline tests), `FakeClient` (stand-in for `DatalabClient`), a `CapturingConsole`, and an `examples` fixture that copies the alice and equations PDFs.
-- `test_pipeline.py` tests orchestration with `FakeBackend`. `test_datalab_backend.py` tests Datalab request fields, polling, resubmits, and timeouts through the pipeline with `FakeClient`. `test_openai_backend.py` tests both GPT-Luna routes with `FakeResponses`: request bodies, page joining, page-count retries, and cost.
-- `tests/samples.py` is the manifest of every file in `examples/` (pages, language, required keywords). `test_samples.py` checks the PDFs and committed reference outputs offline. `test_live.py` (Datalab) and `test_live_llm.py` (GPT-Luna via OpenAI and OpenRouter) convert them for real. Both use the marker `live` and are deselected by default.
-- HTTP behavior is tested with `FakeSession`/`FakeResponse` from `conftest.py` in `tests/test_datalab_client.py` and `tests/test_openai_client.py`.
+- `test_pipeline.py` tests orchestration with `FakeBackend`. `test_datalab_backend.py` tests Datalab request fields, polling, resubmits, and timeouts through the pipeline with `FakeClient`. `test_openai_backend.py` tests both GPT-Luna routes with `FakeResponses`: request bodies, page joining, page-count retries, and cost. `test_mistral_backend.py` tests Mistral with `FakeOCR`: request bodies, page selection, images, tables, and cost.
+- `tests/samples.py` is the manifest of every file in `examples/` (pages, language, required keywords). `test_samples.py` checks the PDFs and committed reference outputs offline. `test_live.py` (Datalab), `test_live_mistral.py` (Mistral OCR), and `test_live_llm.py` (GPT-Luna via OpenAI and OpenRouter) convert them for real. All use the marker `live` and are deselected by default.
+- HTTP behavior is tested with `FakeSession`/`FakeResponse` from `conftest.py` in `tests/test_datalab_client.py`, `tests/test_mistral_client.py`, and `tests/test_openai_client.py`.
 - To add a backend: subclass `Backend` under `backends/<name>/`, give it a `BackendInfo`, register it in `BACKENDS`, and emit `ChunkOutput` content in Marker's conventions so `assemble()` can merge it.
-- CI (`ci.yml`) runs lint, tests on Linux (Python 3.11-3.14), macOS, and Windows, and a wheel smoke test. `live.yml` runs the live suite on manual dispatch using the `DATALAB_API_KEY` secret.
+- CI (`ci.yml`) runs lint, tests on Linux (Python 3.11-3.14), macOS, and Windows, and a wheel smoke test. `live.yml` runs the live suite on manual dispatch using the `DATALAB_API_KEY` secret, plus the optional `MISTRAL_API_KEY`, `OPENAI_API_KEY`, and `OPENROUTER_API_KEY` secrets.
 
 ## Documentation rules for agents
 

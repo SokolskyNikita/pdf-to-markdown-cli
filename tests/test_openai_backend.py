@@ -13,9 +13,9 @@ import threading
 
 import pytest
 
+from docs_to_md.assemble import join_pages
 from docs_to_md.backends import BACKENDS, get_backend
 from docs_to_md.backends.openai import OpenAIBackend, OpenRouterBackend
-from docs_to_md.backends.openai.backend import join_pages
 from docs_to_md.backends.openai.client import OpenAIClient
 from docs_to_md.backends.openai.models import (
     TranscribeRequest,
@@ -88,7 +88,7 @@ def run(inputs, console, client=None, backend=OpenAIBackend, **overrides):
 def test_both_routes_are_registered():
     assert get_backend("openai") is OpenAIBackend
     assert get_backend("openrouter") is OpenRouterBackend
-    assert set(BACKENDS) == {"datalab", "openai", "openrouter"}
+    assert set(BACKENDS) == {"datalab", "mistral", "openai", "openrouter"}
 
 
 def test_info_describes_the_responses_api():

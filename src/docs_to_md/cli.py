@@ -13,6 +13,7 @@ from pathlib import Path
 from docs_to_md import __version__
 from docs_to_md.assemble import OUTPUT_EXTENSIONS
 from docs_to_md.backends import BACKENDS, DEFAULT_BACKEND, get_backend
+from docs_to_md.backends.mistral import MistralBackend
 from docs_to_md.backends.openai import OpenAIBackend
 from docs_to_md.config import (
     DEFAULT_CONCURRENCY,
@@ -38,6 +39,7 @@ examples:
   pdf-to-md scan.pdf --mode accurate    highest quality (slower, costs more)
   pdf-to-md book.pdf --page-range 0-9   first ten pages only (0-based)
   pdf-to-md *.docx --html --overwrite   re-convert, replacing existing outputs
+  pdf-to-md scan.pdf --backend mistral  OCR with Mistral OCR instead
   pdf-to-md scan.pdf --backend openai   transcribe with GPT-Luna instead
   pdf-to-md scan.pdf --backend openrouter
                                         the same, through OpenRouter
@@ -48,6 +50,7 @@ stdout; progress and errors go to stderr.
 
 environment:
   DATALAB_API_KEY    Datalab API key (MARKER_PDF_KEY is also accepted)
+  MISTRAL_API_KEY    Mistral API key, for --backend mistral
   OPENAI_API_KEY     OpenAI API key, for --backend openai
   OPENROUTER_API_KEY OpenRouter API key, for --backend openrouter
   NO_COLOR           disable colored output
@@ -70,10 +73,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="pdf-to-md",
         description=(
             "Convert PDFs, Office documents, ebooks, and images to Markdown, HTML,\n"
-            "or JSON with the Datalab API, or transcribe PDFs and images with an\n"
-            "OpenAI model (GPT-Luna), directly or through OpenRouter. Large PDFs\n"
-            "are split into chunks that convert in parallel and are stitched back\n"
-            "together."
+            "or JSON with the Datalab API, OCR them to Markdown with Mistral OCR,\n"
+            "or transcribe PDFs and images with an OpenAI model (GPT-Luna),\n"
+            "directly or through OpenRouter. Large PDFs are split into chunks that\n"
+            "convert in parallel and are stitched back together."
         ),
         epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -127,11 +130,13 @@ def build_parser() -> argparse.ArgumentParser:
         "-m",
         "--mode",
         choices=tuple(dict.fromkeys(mode for backend in BACKENDS.values() for mode in backend.info.modes)),
-        help="quality/speed trade-off; Datalab defaults to fast, OpenAI and OpenRouter to balanced",
+        help="quality/speed trade-off; Datalab defaults to fast, OpenAI and OpenRouter to balanced"
+        " (Mistral has no modes)",
     )
     conv.add_argument(
         "--model",
-        help=f"model for backends that offer a choice (OpenAI default: {OpenAIBackend.info.default_model})",
+        help="model for backends that offer a choice (defaults: "
+        f"{MistralBackend.info.default_model} for Mistral, {OpenAIBackend.info.default_model} for OpenAI)",
     )
     conv.add_argument("--paginate", action="store_true", help="insert page separators in the output")
     conv.add_argument(

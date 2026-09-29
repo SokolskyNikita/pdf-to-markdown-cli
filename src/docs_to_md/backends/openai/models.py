@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from docs_to_md.backends.base import parse_option_value
 from docs_to_md.errors import APIError
 
 DEFAULT_MODEL = "gpt-6-luna"
@@ -117,14 +118,6 @@ def instructions_for(output_format: str, page_count: int, describe_figures: bool
     )
 
 
-def _parse_option(value: str) -> Any:
-    """``--api-option`` values are JSON when they parse as JSON, else strings."""
-    try:
-        return json.loads(value)
-    except ValueError:
-        return value
-
-
 @dataclass
 class TranscribeRequest:
     """Everything needed to build one /responses request body."""
@@ -155,7 +148,7 @@ class TranscribeRequest:
             },
             "store": False,
         }
-        body.update({key: _parse_option(value) for key, value in (self.extra or {}).items()})
+        body.update({key: parse_option_value(value) for key, value in (self.extra or {}).items()})
         return body
 
 

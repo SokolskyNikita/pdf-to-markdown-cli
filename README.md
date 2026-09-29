@@ -12,7 +12,7 @@
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
 </p>
 
-`pdf-to-md` is a command-line tool that converts documents to Markdown, HTML, or JSON with the [Datalab](https://www.datalab.to/) Convert API, the hosted version of the open-source [Marker](https://github.com/datalab-to/marker) engine. It can also transcribe PDFs and images with OpenAI's GPT-Luna, called [directly or through OpenRouter](#transcribing-with-gpt-luna). It handles the tedious parts for you: splitting big PDFs, uploading in parallel, retrying, stitching the results back together, and fixing page numbers and image links.
+`pdf-to-md` is a command-line tool that converts documents to Markdown, HTML, or JSON with the [Datalab](https://www.datalab.to/) Convert API, the hosted version of the open-source [Marker](https://github.com/datalab-to/marker) engine. It can also read PDFs, Office files, and images with [Mistral OCR](#ocr-with-mistral), or transcribe PDFs and images with OpenAI's GPT-Luna, called [directly or through OpenRouter](#transcribing-with-gpt-luna). It handles the tedious parts for you: splitting big PDFs, uploading in parallel, retrying, stitching the results back together, and fixing page numbers and image links.
 
 ```console
 $ pdf-to-md books/
@@ -49,7 +49,7 @@ Then get an API key from [datalab.to/app/keys](https://www.datalab.to/app/keys) 
 export DATALAB_API_KEY="your_api_key"
 ```
 
-To use GPT-Luna instead, export `OPENAI_API_KEY` or `OPENROUTER_API_KEY` and pass `--backend openai` or `--backend openrouter`.
+To use Mistral OCR instead, export `MISTRAL_API_KEY` and pass `--backend mistral`. For GPT-Luna, export `OPENAI_API_KEY` or `OPENROUTER_API_KEY` and pass `--backend openai` or `--backend openrouter`.
 
 ## Quick start
 
@@ -85,6 +85,9 @@ pdf-to-md contract.pdf --paginate
 pdf-to-md manual.pdf --no-images \
   --no-image-captions
 
+# OCR with Mistral OCR
+pdf-to-md scan.pdf --backend mistral
+
 # Transcribe with GPT-Luna
 pdf-to-md scan.pdf --backend openai
 pdf-to-md scan.pdf --backend openrouter
@@ -99,8 +102,8 @@ pdf-to-md ~/papers -q | xargs wc -w
 ## How it works
 
 1. **Plan.** Inputs are discovered recursively. Hidden files and folders this tool generated earlier are ignored. Each input gets a deterministic output path, and inputs whose output already exists are skipped.
-2. **Split.** PDFs are cut into chunks of `--chunk-size` pages (default 25 for Datalab, 5 for GPT-Luna). Page selection with `--page-range` or `--max-pages` happens here, so only those pages are uploaded and billed. Other formats are uploaded whole.
-3. **Convert.** Up to `--concurrency` chunks (default 5) are processed at once. Each one is uploaded, then polled until it's done (Datalab) or answered in one request (GPT-Luna). Throttling and server errors are retried, honoring the API's `Retry-After`.
+2. **Split.** PDFs are cut into chunks of `--chunk-size` pages (default 25 for Datalab and Mistral, 5 for GPT-Luna). Page selection with `--page-range` or `--max-pages` happens here, so only those pages are uploaded and billed. Other formats are uploaded whole.
+3. **Convert.** Up to `--concurrency` chunks (default 5) are processed at once. Each one is uploaded, then polled until it's done (Datalab) or answered in one request (Mistral, GPT-Luna). Throttling and server errors are retried, honoring the API's `Retry-After`.
 4. **Merge.** Chunk results are joined in page order. Page separators, HTML page ids, JSON block ids, and in-document anchors are renumbered to match the original document. Images are renamed so they never collide, and links to them are URL-encoded.
 5. **Write.** The output is written to a temporary file and renamed into place, so an interrupted run never leaves a partial file behind.
 
@@ -129,6 +132,8 @@ papers/
 
 Outputs are Markdown (`.md`, the default), HTML (`.html`), or JSON (`.json`, Marker's block tree with page and position data). The API accepts files of up to 200 MB. Non-PDF files are always sent as a single request.
 
+These are Datalab's formats. [Mistral](#ocr-with-mistral) and [GPT-Luna](#transcribing-with-gpt-luna) accept fewer, and the tool only picks up files the chosen backend can read.
+
 ## Quality, speed, and cost
 
 `--mode` picks a Datalab processing mode:
@@ -143,6 +148,25 @@ Every result line shows what Datalab billed, and the run summary adds it up. In 
 
 Throughput depends on your plan's limits. With the default of 5 concurrent requests (the free tier's limit), the 1,563-page run above took 4 minutes 37 seconds. Paid plans allow far more concurrency, so raise `-j` to match yours.
 
+## OCR with Mistral
+
+`--backend mistral` sends each chunk to [Mistral OCR](https://docs.mistral.ai/capabilities/document_ai/basic_ocr) through Mistral's own API. It returns Markdown for every page and crops out figures as image files, as Datalab does. Running headers, footers, and page numbers are left out of the text.
+
+| | Datalab (default) | Mistral OCR |
+| --- | --- | --- |
+| Inputs | PDFs, Office, ebooks, images | PDFs, Word, PowerPoint, Excel, ODT, CSV, images |
+| Outputs | Markdown, HTML, JSON | Markdown |
+| Figures | Extracted as image files | Extracted as image files |
+| Pages per request | 25 | 25 |
+| `--mode` | Datalab processing mode | Not available |
+| Price per 1,000 pages | See [pricing](https://www.datalab.to/pricing) | $4 ([pricing](https://mistral.ai/pricing)) |
+
+Mistral accepts `.pdf`, `.doc`, `.docx`, `.odt`, `.ppt`, `.pptx`, `.xlsx`, `.csv`, and `.png` `.jpg` `.jpeg` `.webp` `.gif` `.tif` `.tiff` `.bmp` `.avif` `.heic` images, up to 50 MB and 1,000 pages per request. `--page-range` and `--max-pages` work for Office files too.
+
+The default model is `mistral-ocr-4-0` (OCR 4.0). In September 2026 tests it found every sample's required words and read the dense 1980 census table cell for cell. It converted all 25 sample pages in 13 seconds for 10¢. OCR 4.1 (`--model mistral-ocr-latest`) did no better on our samples and writes math as `\( \)` instead of `$`. OCR 3 (`--model mistral-ocr-2512`) costs half as much but read the tables and the Chinese sample much worse. Mistral's weak spot is faded scans full of numbers: on the 1880 census microfiche it misread 6 of the 16 hard cells we checked, all of which GPT-Luna and Datalab's `accurate` mode got right.
+
+`--api-option KEY=VALUE` adds any other [OCR API](https://docs.mistral.ai/api/endpoint/ocr) field, with JSON values decoded. For example, `--api-option table_format=html` writes tables as HTML inside the Markdown, and `--api-option extract_header=false` keeps running headers in the text.
+
 ## Transcribing with GPT-Luna
 
 `--backend openai` sends each chunk to OpenAI's [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), a low-cost vision model, through the Responses API. `--backend openrouter` sends the same request to the same model through [OpenRouter](https://openrouter.ai/openai/gpt-6-luna). The model sees each page's image and its text layer and writes one transcription per page. The tool checks that it got exactly one page back for every page sent, then merges the pages the same way as Datalab results.
@@ -155,7 +179,7 @@ Throughput depends on your plan's limits. With the default of 5 concurrent reque
 | Pages per request | 25 | 5 |
 | `--mode` | Datalab processing mode | Reasoning effort |
 
-Datalab remains the default. GPT-Luna runs only when you choose it with `--backend`.
+Datalab remains the default. Mistral and GPT-Luna run only when you choose them with `--backend`.
 
 In September 2026 test runs, GPT-Luna transcribed all 25 sample pages for about 2¢ on either route. That's 0.08¢ per page on average and about 0.2¢ for the dense census tables, versus about 0.3¢ per page on Datalab. Both routes bill the same token rates, and results show the cost of each file. For half price in exchange for slower responses, add `--api-option service_tier=flex` (OpenAI only).
 
@@ -208,14 +232,14 @@ pdf-to-md INPUT [INPUT ...] [options]
 
 | Option | Description |
 | --- | --- |
-| `--backend NAME` | `datalab` (default), `openai`, or `openrouter`. |
-| `-m`, `--mode MODE` | `fast`, `balanced`, or `accurate`. Defaults to `fast` on Datalab and `balanced` on GPT-Luna. |
-| `--model NAME` | GPT-Luna backends only. Default: `gpt-6-luna`. |
+| `--backend NAME` | `datalab` (default), `mistral`, `openai`, or `openrouter`. |
+| `-m`, `--mode MODE` | `fast`, `balanced`, or `accurate`. Defaults to `fast` on Datalab and `balanced` on GPT-Luna. Mistral has no modes. |
+| `--model NAME` | Mistral and GPT-Luna only. Defaults: `mistral-ocr-4-0` and `gpt-6-luna`. |
 | `--paginate` | Insert page separators. |
 | `--no-images` | Don't extract images. |
 | `--no-image-captions` | Don't generate image descriptions. |
 | `--skip-cache` | Ignore Datalab's server-side cache of previous results. |
-| `--api-option KEY=VALUE` | Send any other API field: a [Convert API](https://documentation.datalab.to/api-reference/convert-document) form field, or a Responses API field for GPT-Luna. Repeatable, e.g. `--api-option extras=extract_links`. |
+| `--api-option KEY=VALUE` | Send any other API field: a [Convert API](https://documentation.datalab.to/api-reference/convert-document) form field, an OCR API field for Mistral, or a Responses API field for GPT-Luna. Repeatable, e.g. `--api-option extras=extract_links`. |
 
 **Pages and chunking**
 
@@ -223,7 +247,7 @@ pdf-to-md INPUT [INPUT ...] [options]
 | --- | --- |
 | `--page-range RANGE` | 0-based pages to convert, e.g. `0,5-10`. |
 | `--max-pages N` | Convert at most `N` pages of each document. |
-| `--chunk-size N` | PDF pages per request. Default: `25` on Datalab, `5` on GPT-Luna. Smaller chunks mean more parallelism but more requests. |
+| `--chunk-size N` | PDF pages per request. Default: `25` on Datalab and Mistral, `5` on GPT-Luna. Smaller chunks mean more parallelism but more requests. |
 | `--no-chunk` | Send each PDF as one request. |
 
 **Run control**
@@ -256,6 +280,7 @@ Because finished files are skipped, the simplest way to retry failures in an int
 | Variable | Purpose |
 | --- | --- |
 | `DATALAB_API_KEY` | API key, the same variable Datalab's SDK uses. The pre-1.0 name `MARKER_PDF_KEY` also works. |
+| `MISTRAL_API_KEY` | Mistral API key, for `--backend mistral`. |
 | `OPENAI_API_KEY` | OpenAI API key, for `--backend openai`. |
 | `OPENROUTER_API_KEY` | OpenRouter API key, for `--backend openrouter`. |
 | `NO_COLOR` | Disable colored output. |
@@ -267,9 +292,9 @@ Because finished files are skipped, the simplest way to retry failures in an int
 | Message | What to do |
 | --- | --- |
 | `No API key found` | Set the backend's key variable (see [Configuration](#configuration)). |
-| `Authentication failed` | The key was rejected. Check it on the [Datalab](https://www.datalab.to/app/keys), [OpenAI](https://platform.openai.com/api-keys), or [OpenRouter](https://openrouter.ai/settings/keys) dashboard. |
+| `Authentication failed` | The key was rejected. Check it on the [Datalab](https://www.datalab.to/app/keys), [Mistral](https://console.mistral.ai/api-keys), [OpenAI](https://platform.openai.com/api-keys), or [OpenRouter](https://openrouter.ai/settings/keys) dashboard. |
 | `Payment required` | Your Datalab account is out of credits. |
-| `out of credits or over quota` | Your OpenAI or OpenRouter account needs credits or a higher spend limit. |
+| `out of credits` | Your Mistral, OpenAI, or OpenRouter account needs credits or a higher spend limit. |
 | `returned N pages for M` | GPT-Luna merged or split pages. Lower `--chunk-size`. |
 | `exists (use --overwrite)` | The output is already there. Add `--overwrite` to redo it. |
 | `timed out` | A request took longer than `--timeout`. Raise it, or lower `--chunk-size`. |
@@ -295,7 +320,7 @@ Bug reports, ideas, and pull requests are welcome. [CONTRIBUTING.md](https://git
 
 ## Acknowledgements
 
-Conversion quality comes from [Marker](https://github.com/datalab-to/marker) and the [Datalab](https://www.datalab.to/) API, or from OpenAI's GPT-Luna. This is an independent project and isn't affiliated with Datalab, OpenAI, or OpenRouter.
+Conversion quality comes from [Marker](https://github.com/datalab-to/marker) and the [Datalab](https://www.datalab.to/) API, from Mistral OCR, or from OpenAI's GPT-Luna. This is an independent project and isn't affiliated with Datalab, Mistral AI, OpenAI, or OpenRouter.
 
 ## License
 

@@ -27,6 +27,7 @@ The Darwin, Tolstoy, Grimm, Shijing, Lane, Gesenius, Loeb *Odyssey*, Besant *Git
 - [`tests/samples.py`](../tests/samples.py) lists every sample with its page count, the words a correct conversion must contain, the minimum number of table rows, and the mode, if it isn't the default.
 - `tests/test_samples.py` checks, offline, that each PDF opens and splits correctly, and that each committed `.md` file here is complete: it contains the expected words and every image link resolves.
 - `tests/test_live.py` converts every sample with the real Datalab API, one page per chunk with pagination, then checks the text, page numbering, and images. Run it with `DATALAB_API_KEY=... pytest -m live` when changing anything that affects output.
+- `tests/test_live_mistral.py` runs the same checks through Mistral OCR when `MISTRAL_API_KEY` is set.
 - `tests/test_live_llm.py` runs the same checks, except images, through GPT-Luna, once through OpenAI and once through OpenRouter. Each backend runs when its key (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`) is set.
 
 ## Adding a sample

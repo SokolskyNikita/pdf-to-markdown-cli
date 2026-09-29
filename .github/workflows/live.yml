@@ -1,9 +1,10 @@
 name: Live API tests
 
 # Converts the sample documents with the real Datalab API (a few cents per run).
-# Requires a DATALAB_API_KEY repository secret. OPENAI_API_KEY and
-# OPENROUTER_API_KEY secrets are optional: the GPT-Luna tests for each run
-# only when its secret is set. Run it from the Actions tab.
+# Requires a DATALAB_API_KEY repository secret. MISTRAL_API_KEY,
+# OPENAI_API_KEY, and OPENROUTER_API_KEY secrets are optional: the Mistral and
+# GPT-Luna tests for each run only when its secret is set. Run it from the
+# Actions tab.
 on:
   workflow_dispatch:
 
@@ -30,6 +31,7 @@ jobs:
       - name: Run live tests
         env:
           DATALAB_API_KEY: ${{ secrets.DATALAB_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |

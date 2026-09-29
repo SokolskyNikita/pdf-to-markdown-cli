@@ -8,6 +8,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-29
+
+### Added
+
+- Mistral OCR backend: `--backend mistral` reads PDFs, Word, PowerPoint, Excel, ODT, CSV, and images with Mistral's OCR API and writes Markdown with extracted images. It reads `MISTRAL_API_KEY`, defaults to OCR 4.0 (`mistral-ocr-4-0`, pick another with `--model`), leaves running headers and footers out of the text, and reports each file's cost at Mistral's per-page price.
+- `tests/test_live_mistral.py`: live tests of every sample through Mistral OCR.
+
 ## [1.3.0] - 2026-09-29
 
 ### Added

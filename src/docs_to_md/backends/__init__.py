@@ -7,13 +7,15 @@ from __future__ import annotations
 
 from docs_to_md.backends.base import Backend, BackendInfo, CancelCheck
 from docs_to_md.backends.datalab import DatalabBackend
+from docs_to_md.backends.mistral import MistralBackend
 from docs_to_md.backends.openai import OpenAIBackend, OpenRouterBackend
 from docs_to_md.errors import ConfigurationError
 
 DEFAULT_BACKEND = "datalab"
 
 BACKENDS: dict[str, type[Backend]] = {
-    backend.info.name: backend for backend in (DatalabBackend, OpenAIBackend, OpenRouterBackend)
+    backend.info.name: backend
+    for backend in (DatalabBackend, MistralBackend, OpenAIBackend, OpenRouterBackend)
 }
 
 

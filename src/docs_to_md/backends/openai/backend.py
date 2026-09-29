@@ -8,7 +8,7 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from docs_to_md.assemble import ChunkOutput
+from docs_to_md.assemble import ChunkOutput, join_pages
 from docs_to_md.backends.base import Backend, BackendInfo, CancelCheck
 from docs_to_md.backends.openai.client import DEFAULT_BASE_URL, OpenAIClient
 from docs_to_md.backends.openai.models import (
@@ -30,20 +30,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_PAGE_COUNT_ATTEMPTS = 2
-MARKDOWN_PAGE_MARKER = "-" * 48
-
-
-def join_pages(pages: list[str], output_format: str, paginate: bool) -> str:
-    """Combine per-page text using Marker's conventions, with chunk-local page numbers."""
-    if output_format == "html":
-        divs = "".join(
-            f'<div class="page" data-page-id="{i}">\n{page.strip()}\n</div>\n' for i, page in enumerate(pages)
-        )
-        head = '<head><meta charset="utf-8"/></head>'
-        return f"<!DOCTYPE html>\n<html>\n{head}\n<body>\n{divs}</body>\n</html>\n"
-    if paginate:
-        return "".join(f"\n\n{{{i}}}{MARKDOWN_PAGE_MARKER}\n\n{page.strip()}" for i, page in enumerate(pages))
-    return "\n\n".join(page.strip() for page in pages if page.strip())
 
 
 class OpenAIBackend(Backend):

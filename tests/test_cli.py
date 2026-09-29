@@ -149,6 +149,21 @@ def test_llm_backends(tmp_path, monkeypatch):
         parse(str(tmp_path), "-n", "--model", "gpt-6-luna")
 
 
+def test_mistral_backend(tmp_path, monkeypatch):
+    with pytest.raises(ConfigurationError, match="MISTRAL_API_KEY"):
+        parse(str(tmp_path), "--backend", "mistral")
+    monkeypatch.setenv("MISTRAL_API_KEY", "mk")
+    config, _ = parse(str(tmp_path), "--backend", "mistral", "--model", "mistral-ocr-2512")
+    assert (config.backend, config.api_key, config.chunk_size, config.model) == (
+        "mistral",
+        "mk",
+        25,
+        "mistral-ocr-2512",
+    )
+    with pytest.raises(ConfigurationError, match="Mistral backend cannot produce json"):
+        parse(str(tmp_path), "--backend", "mistral", "--json")
+
+
 def test_llm_keys_do_not_change_the_default_backend(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or")
