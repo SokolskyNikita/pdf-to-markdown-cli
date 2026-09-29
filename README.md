@@ -92,16 +92,6 @@ pdf-to-md ~/papers -q | xargs wc -w
 
 ## How it works
 
-```mermaid
-flowchart LR
-    A[Files and folders] --> B[Plan outputs<br/>skip finished]
-    B --> C[Split PDFs into<br/>page chunks]
-    C --> D[Upload chunks<br/>in parallel]
-    D --> E[Poll with backoff<br/>retry transient errors]
-    E --> F[Merge in page order<br/>renumber pages, rename images]
-    F --> G[Write atomically<br/>report.md + report_images/]
-```
-
 1. **Plan.** Inputs are discovered recursively. Hidden files and folders this tool generated earlier are ignored. Each input gets a deterministic output path, and inputs whose output already exists are skipped.
 2. **Split.** PDFs are cut into chunks of `--chunk-size` pages (default 25). Page selection with `--page-range` or `--max-pages` happens here, so only those pages are uploaded and billed. Other formats are uploaded whole.
 3. **Convert.** Up to `--concurrency` chunks (default 5) are processed at once. Each one is uploaded and then polled until it's done. Throttling and server errors are retried, honoring the API's `Retry-After`.
