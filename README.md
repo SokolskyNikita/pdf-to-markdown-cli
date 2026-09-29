@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/pypi/v/pdf-to-markdown-cli.svg" alt="PyPI"></a>
-  <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
+  <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml"><img src="https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/releases"><img src="https://img.shields.io/github/v/release/SokolskyNikita/pdf-to-markdown-cli" alt="GitHub release"></a>
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
@@ -31,11 +31,11 @@ Done in 4m37s: 3 converted · 1563 pages · $4.69
 - **Honest about results.** Every file reports its pages and cost. The exit code says whether anything failed. A bad API key stops the run immediately instead of failing file by file.
 - **Resilient.** Rate limits, server errors, and dropped connections are retried with backoff. Ctrl-C stops cleanly without leaving half-written files.
 - **Made for scripting.** Converted paths go to stdout, progress and errors to stderr, so it drops straight into pipelines and CI jobs.
-- **Any language, any era.** Tested on modern PDFs, math, and scans of Cyrillic, blackletter German, and vertical classical Chinese ([samples](#sample-conversions)).
+- **Any language, any era.** Tested on modern PDFs, math, statistical tables from a faded microfiche, and scans of Cyrillic, blackletter German, and vertical classical Chinese ([samples](#sample-conversions)).
 
 ## Installation
 
-Requires Python 3.10 or newer. [pipx](https://pipx.pypa.io/) installs it in its own isolated environment:
+Requires Python 3.11 or newer. [pipx](https://pipx.pypa.io/) installs it in its own isolated environment:
 
 ```bash
 pipx install pdf-to-markdown-cli
@@ -149,6 +149,8 @@ Throughput depends on your plan's limits. With the default of 5 concurrent reque
 | [*War and Peace* (1937 ed.)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/tolstoy_war_and_peace_ru.md) | Russian | Cyrillic mixed with French, footnotes |
 | [*Grimm's Fairy Tales* (1857)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/grimm_fairy_tales_de.md) | German | Fraktur blackletter typeface |
 | [*Shijing Gupu* (1908)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/shijing_gupu_zh.md) | Chinese | Vertical text, music notation |
+| [1880 Census tables](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/census_1880_tables_en.md) | English | Microfiche scan, side-by-side tables |
+| [1980 Census ancestry](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/census_1980_ancestry_en.md) | English | Dense table, two-level headers |
 
 See [examples/README.md](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/README.md) for sources and how the samples are used in tests.
 

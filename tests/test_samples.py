@@ -43,6 +43,7 @@ def test_reference_output_is_complete(sample):
     text = output.read_text(encoding="utf-8")
     for keyword in sample.keywords:
         assert keyword.casefold() in text.casefold(), f"{keyword!r} missing from {output.name}"
+    assert sum(line.startswith("|") for line in text.splitlines()) >= sample.min_table_rows
     links = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
     assert bool(links) == sample.has_images
     for link in links:

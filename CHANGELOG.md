@@ -8,6 +8,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-29
+
+### Added
+
+- Two hard table samples: a yellowed 1880 Census microfiche page with side-by-side tables, and a dense 1980 Census table with two-level headers. Both have reference outputs, and the tests check their table structure.
+
+### Changed
+
+- **Requires Python 3.11 or newer.** Python 3.10 reaches end of life in October 2026, and the current pikepdf needs 3.11.
+- Dependencies raised to their latest releases: pikepdf 10.15, requests 2.34, tqdm 4.70. Development tools: pytest 9.1, pytest-cov 7.1, ruff 0.16, build 1.6, twine 7.0, setuptools 84.
+
+### Removed
+
+- `SECURITY.md`.
+
 ## [1.0.1] - 2026-09-29
 
 ### Added

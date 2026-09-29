@@ -21,6 +21,8 @@ class Sample:
     keywords: tuple[str, ...]
     has_images: bool
     challenge: str
+    mode: str | None = None  # --mode used for the reference output and live test
+    min_table_rows: int = 0  # Markdown table rows a correct conversion must contain
 
     @property
     def path(self) -> Path:
@@ -68,5 +70,24 @@ SAMPLES = (
         ("古詩", "皇皇者華"),
         True,
         "1908 lithograph: vertical right-to-left text and music notation",
+    ),
+    Sample(
+        "census_1880_tables_en.pdf",
+        2,
+        "en",
+        ("Marshall township", "1,910", "Lesterville"),
+        False,
+        "yellowed microfiche: side-by-side tables, dotted leaders, wrapped remarks",
+        mode="accurate",
+        min_table_rows=100,
+    ),
+    Sample(
+        "census_1980_ancestry_en.pdf",
+        2,
+        "en",
+        ("Albanian", "16 971", "Middle Atlantic"),
+        False,
+        "dense statistical table with two-level column headers",
+        min_table_rows=100,
     ),
 )

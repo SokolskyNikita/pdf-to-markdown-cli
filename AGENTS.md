@@ -4,7 +4,7 @@ This file is the compact implementation map for agents working in this repositor
 
 ## Project summary
 
-`pdf-to-markdown-cli` is a Python 3.10+ CLI that converts documents to Markdown, HTML, or JSON with the Datalab Convert API.
+`pdf-to-markdown-cli` is a Python 3.11+ CLI that converts documents to Markdown, HTML, or JSON with the Datalab Convert API.
 
 ```bash
 pdf-to-md INPUT [INPUT ...] [options]
@@ -62,7 +62,7 @@ ruff check . && ruff format --check .
 - `tests/conftest.py` provides `FakeClient`, a `CapturingConsole`, and an `examples` fixture that copies the alice and equations PDFs.
 - `tests/samples.py` is the manifest of every file in `examples/` (pages, language, required keywords). `test_samples.py` checks the PDFs and committed reference outputs offline. `test_live.py` (marker `live`, deselected by default) converts them for real.
 - HTTP behavior is tested with a fake session in `tests/test_client.py`.
-- CI (`ci.yml`) runs lint, tests on Linux (Python 3.10-3.14), macOS, and Windows, and a wheel smoke test. `live.yml` runs the live suite on manual dispatch using the `DATALAB_API_KEY` secret.
+- CI (`ci.yml`) runs lint, tests on Linux (Python 3.11-3.14), macOS, and Windows, and a wheel smoke test. `live.yml` runs the live suite on manual dispatch using the `DATALAB_API_KEY` secret.
 
 ## Documentation rules for agents
 

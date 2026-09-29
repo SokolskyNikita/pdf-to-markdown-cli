@@ -59,7 +59,7 @@ examples/         sample documents with reference outputs
 
 ## Conventions
 
-- Python 3.10+, type-hinted, with `from __future__ import annotations`.
+- Python 3.11+, type-hinted, with `from __future__ import annotations`.
 - Raise exceptions from `errors.py`. Use `FatalAPIError` only for problems that affect every request (bad key, no credits). It aborts the whole run.
 - Keep network code in `client.py` and orchestration in `pipeline.py`. Pipeline tests use `FakeClient` from `tests/conftest.py`. HTTP behavior is tested with the fake session in `tests/test_client.py`.
 - Add tests with every behavior change, in the module's test file. The suite is fast (under a second), so keep it that way.
@@ -68,8 +68,6 @@ examples/         sample documents with reference outputs
 ## Reporting bugs and proposing features
 
 Open an [issue](https://github.com/SokolskyNikita/pdf-to-markdown-cli/issues/new/choose) using the templates. For a bug, the most useful things are the exact command, the input type, and the output of the same command with `-v`. Please don't attach confidential documents.
-
-Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## Releasing (maintainers)
 

@@ -5,7 +5,7 @@ conversion output:
 
     DATALAB_API_KEY=... pytest -m live
 
-A full run converts about 16 pages in fast mode (a few cents).
+A full run converts about 20 pages (a few cents).
 """
 
 from __future__ import annotations
@@ -45,12 +45,14 @@ def convert(tmp_path, sample, *args):
 @pytest.mark.parametrize("sample", SAMPLES, ids=[s.filename for s in SAMPLES])
 def test_markdown_conversion(tmp_path, sample):
     # One page per chunk exercises splitting, merging, and page renumbering.
-    out, console = convert(tmp_path, sample, "--chunk-size", "1", "--paginate")
+    mode = ["--mode", sample.mode] if sample.mode else []
+    out, console = convert(tmp_path, sample, "--chunk-size", "1", "--paginate", *mode)
     text = (out / sample.filename.replace(".pdf", ".md")).read_text(encoding="utf-8")
 
     for keyword in sample.keywords:
         assert keyword.casefold() in text.casefold(), f"{keyword!r} missing"
     assert [int(n) for n in PAGE_MARKER.findall(text)] == list(range(sample.pages))
+    assert sum(line.startswith("|") for line in text.splitlines()) >= sample.min_table_rows
     for link in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text):
         assert (out / unquote(link)).is_file(), f"broken image link {link}"
     assert f"{sample.pages} page" in console.err
