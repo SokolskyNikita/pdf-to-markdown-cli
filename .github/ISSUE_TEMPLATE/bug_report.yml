@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Please don't attach confidential documents.
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran (remove your API key).
+      placeholder: pdf-to-md report.pdf --mode accurate
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output with -v
+      description: Run the same command with `-v` and paste the output.
+      render: text
+  - type: input
+    id: input-type
+    attributes:
+      label: Input
+      description: File type, page count, and whether it's a scan.
+      placeholder: 300-page scanned PDF
+  - type: input
+    id: version
+    attributes:
+      label: Version and platform
+      description: Output of `pdf-to-md --version`, plus OS and Python version.
+      placeholder: pdf-to-md 1.0.1, macOS 15, Python 3.13
+    validations:
+      required: true

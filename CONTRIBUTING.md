@@ -1,8 +1,15 @@
-# Contributing
+# Contributing to pdf-to-md
 
-Thanks for helping improve `pdf-to-markdown-cli`. The most valuable contributions keep conversions reliable and predictable, and keep the CLI pleasant to script.
+Thanks for your interest in improving `pdf-to-md`! Bug reports, feature ideas, documentation fixes, and pull requests are all welcome.
 
-## Development setup
+## Ground rules
+
+- **Reliability over features.** A conversion tool is only useful if you can trust it with a thousand files. Changes should keep runs predictable, re-runnable, and honest about failures.
+- **Keep the CLI scriptable.** Only converted file paths go to stdout, and exit codes carry meaning. Don't print anything else to stdout.
+- **Stay backward-compatible** unless a breaking change is deliberate. Document breaking changes in `CHANGELOG.md` and in the README's upgrade section.
+- **Never commit** API keys, private documents, or build artifacts.
+
+## Getting set up
 
 ```bash
 git clone https://github.com/SokolskyNikita/pdf-to-markdown-cli.git
@@ -11,67 +18,66 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Run the checks CI runs:
+## Checks
+
+CI runs these on Linux, macOS, and Windows for every supported Python version. Run them before opening a pull request:
 
 ```bash
-pytest --cov
-ruff check .
-ruff format --check .
+pytest --cov              # unit and integration tests; never calls the API
+ruff check .              # lint
+ruff format --check .     # formatting (run `ruff format .` to fix)
 ```
 
-For manual testing against the live API, set a key and use the bundled samples. They are small, so they cost fractions of a cent:
+### Live API tests
+
+`tests/test_live.py` converts every document in [`examples/`](examples/) with the real Datalab API. It checks text in five languages and scripts, chunk merging, page numbering, images, and the HTML and JSON outputs. These tests are skipped by default. Run them when you change anything that affects conversion output:
 
 ```bash
-export DATALAB_API_KEY="your_api_key"
-pdf-to-md examples/alice_in_wonderland_sample.pdf -o /tmp/out --chunk-size 1 --paginate
+DATALAB_API_KEY=... pytest -m live    # ~16 pages, a few cents
 ```
+
+Maintainers can also run them from the **Live API tests** workflow in the Actions tab, which uses the repository's `DATALAB_API_KEY` secret.
 
 ## Project layout
 
 ```text
 src/docs_to_md/
-  cli.py         argument parsing, entry point, exit codes, run summary
-  config.py      validated runtime configuration
-  discovery.py   input discovery and deterministic output planning
-  pipeline.py    splitting, concurrent submission, polling, per-file results
-  client.py      Datalab Convert API client (retries, timeouts, error types)
-  models.py      API request/response types and supported formats
-  pdf.py         page-range parsing and PDF splitting (pikepdf)
-  assemble.py    merging chunk outputs, image renaming, atomic writes
-  markdown.py    Markdown line-break normalization
-  console.py     terminal output, progress bar, logging setup
-  errors.py      exception hierarchy
-tests/           pytest suite; no test calls the live API
+├── cli.py         argument parsing, entry point, exit codes, run summary
+├── config.py      validated runtime configuration
+├── discovery.py   input discovery and deterministic output planning
+├── pipeline.py    splitting, concurrent submission, polling, per-file results
+├── client.py      Datalab Convert API client: retries, timeouts, error types
+├── models.py      API request/response types and supported formats
+├── pdf.py         page-range parsing and PDF splitting (pikepdf)
+├── assemble.py    merging chunk outputs, renumbering pages, images, atomic writes
+├── markdown.py    Markdown clean-up (line reflow, duplicate captions)
+├── console.py     terminal output, progress bar, logging
+└── errors.py      exception hierarchy
+tests/             pytest suite, plus samples.py (the manifest of examples/)
+examples/          sample documents with reference outputs (see examples/README.md)
 ```
 
 ## Conventions
 
-- Target Python 3.10+. Use type hints and `from __future__ import annotations`.
-- Keep the stdout/stderr split: only converted file paths go to stdout.
-- Raise exceptions from `errors.py`. Raise `FatalAPIError` only for problems that affect every request, such as a bad key or no credits.
-- Keep CLI behavior backward-compatible unless a breaking change is intentional and documented in `CHANGELOG.md`.
-- Never commit API keys, private documents, or build artifacts.
+- Python 3.10+, type-hinted, with `from __future__ import annotations`.
+- Raise exceptions from `errors.py`. Use `FatalAPIError` only for problems that affect every request (bad key, no credits). It aborts the whole run.
+- Keep network code in `client.py` and orchestration in `pipeline.py`. Pipeline tests use `FakeClient` from `tests/conftest.py`. HTTP behavior is tested with the fake session in `tests/test_client.py`.
+- Add tests with every behavior change, in the module's test file. The suite is fast (under a second), so keep it that way.
+- Update the docs in the same pull request: `README.md` for user-facing changes, `CHANGELOG.md` under **Unreleased**, and `AGENTS.md` when the module map or conventions change.
 
-## Tests
+## Reporting bugs and proposing features
 
-Add or update tests whenever you change CLI options, output naming, discovery rules, API request/response handling, chunk merging, or error handling. Use `tests/conftest.py`'s `FakeClient` for pipeline tests, and a fake session (see `tests/test_client.py`) for HTTP behavior.
+Open an [issue](https://github.com/SokolskyNikita/pdf-to-markdown-cli/issues/new/choose) using the templates. For a bug, the most useful things are the exact command, the input type, and the output of the same command with `-v`. Please don't attach confidential documents.
 
-## Documentation
+Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
-Update `README.md` for user-facing changes, `CHANGELOG.md` for anything release-visible, and `AGENTS.md` when the module map or conventions change.
+## Releasing (maintainers)
 
-`examples/` holds the sample PDFs used by the tests, next to their outputs from the current version. If output behavior changes, regenerate the outputs with `pdf-to-md examples --overwrite`. The Datalab API reference lives at <https://documentation.datalab.to/api-reference/>.
+1. Move the **Unreleased** changelog notes under a `## [X.Y.Z] - YYYY-MM-DD` heading and bump `version` in `pyproject.toml`.
+2. Commit, push to `main`, and wait for CI to pass.
+3. Tag and push: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
 
-## Releasing
-
-1. Bump `version` in `pyproject.toml` and move the `Unreleased` changelog notes under a `## [X.Y.Z] - YYYY-MM-DD` heading.
-2. Commit, push `main`, and wait for CI to pass.
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-
-The [release workflow](.github/workflows/release.yml) checks that the tag matches the package version, runs the tests, builds the sdist and wheel, and creates the GitHub release with those files attached and the changelog section as notes. It then publishes to PyPI through [Trusted Publishing](https://docs.pypi.org/trusted-publishers/).
-
-PyPI publishing needs a one-time setup. On pypi.org, go to the project's **Settings → Publishing** and add a GitHub publisher (`SokolskyNikita/pdf-to-markdown-cli`, workflow `release.yml`, environment `pypi`). Then set the repository variable `PYPI_PUBLISH=true`. Until then, upload manually with `twine upload dist/*`, using the files attached to the GitHub release.
-
-## Reporting issues
-
-Open a GitHub issue with the command you ran, the input file type, what you expected, and the output of the same command with `-v`.
+The [release workflow](.github/workflows/release.yml) then:
+- checks that the tag matches the package version, runs the tests, and builds the sdist and wheel;
+- creates the GitHub release with both files attached and the changelog section as notes;
+- publishes to PyPI via [Trusted Publishing](https://docs.pypi.org/trusted-publishers/), with no stored tokens.

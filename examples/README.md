@@ -1,0 +1,28 @@
+# Sample documents
+
+Each PDF here sits next to the real output `pdf-to-md` produced for it: `<name>.md`, plus `<name>_images/` when the document has images. They show what to expect from a conversion, and they're the fixtures for the test suite.
+
+| File | Pages | Language | What makes it hard | Source |
+| --- | --- | --- | --- | --- |
+| `alice_in_wonderland_sample.pdf` | 3 | English | Illustrated novel pages, curly quotes | Lewis Carroll, *Alice's Adventures in Wonderland* (1865) |
+| `equations.pdf` | 1 | English | Dense mathematics, rendered as LaTeX | Algebraic geometry lecture notes |
+| `darwin_origin_of_species_en.pdf` | 2 | English | 1859 letterpress scan, fold-out tree diagram | Charles Darwin, *On the Origin of Species*, first edition facsimile, p. 117 and the fold-out diagram |
+| `tolstoy_war_and_peace_ru.pdf` | 2 | Russian | Cyrillic mixed with French, translated footnotes, margin line numbers | Leo Tolstoy, *War and Peace*, vol. 1, Complete Works vol. 9 (1937), pp. 13–14 |
+| `grimm_fairy_tales_de.pdf` | 2 | German | Fraktur blackletter, 19th-century spelling | Brothers Grimm, *Kinder- und Hausmärchen*, 7th ed., vol. 2 (1857), tale 88 |
+| `shijing_gupu_zh.pdf` | 2 | Chinese | Vertical right-to-left classical text, staff notation with numbered notes | Yuan Jiagu (ed.), *Shijing Gupu* (1908 lithograph), preface and first score |
+
+The Darwin, Tolstoy, Grimm, and Shijing samples are public-domain texts. They're two-page excerpts of full-book scans, kept small so the repository and the source distribution stay light.
+
+## How the tests use them
+
+- [`tests/samples.py`](../tests/samples.py) lists every sample with its page count and words a correct conversion must contain.
+- `tests/test_samples.py` checks, offline, that each PDF opens and splits correctly, and that each committed `.md` file here is complete: it contains the expected words and every image link resolves.
+- `tests/test_live.py` converts every sample with the real API, one page per chunk with pagination, then checks the text, page numbering, and images. Run it with `DATALAB_API_KEY=... pytest -m live` when changing anything that affects output.
+
+## Adding a sample
+
+1. Put a short excerpt (one to three pages) of a public-domain document here. It should exercise something the other samples don't.
+2. Generate its output: `pdf-to-md examples`. Existing outputs are skipped, so only the new file is converted.
+3. Add an entry to `tests/samples.py` and a row to the tables here and in the main README.
+
+To refresh every output after a change in conversion behavior, run `pdf-to-md examples --overwrite` and review the diff.

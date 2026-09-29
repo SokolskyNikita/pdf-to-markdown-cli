@@ -2,6 +2,6 @@ include README.md LICENSE CHANGELOG.md CONTRIBUTING.md
 
 # The test suite, with the sample PDFs it uses, so the sdist is testable.
 recursive-include tests *.py
-include examples/alice_in_wonderland_sample.pdf examples/equations.pdf
+graft examples
 
 global-exclude *.py[cod] __pycache__ .DS_Store

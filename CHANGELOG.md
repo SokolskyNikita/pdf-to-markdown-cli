@@ -8,6 +8,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-29
+
+### Added
+
+- Multilingual sample documents in `examples/`: scanned excerpts in Russian (Tolstoy), German Fraktur (Grimm), classical Chinese with music notation (Shijing Gupu), and English (Darwin's 1859 diagram), each with its reference output.
+- An opt-in live test suite (`pytest -m live`) that converts every sample with the real API and checks text, chunk merging, page numbering, images, and HTML/JSON output. A manual **Live API tests** workflow runs it in CI.
+- `SECURITY.md`, issue and pull request templates, and `examples/README.md`.
+
+### Changed
+
+- Rewrote `README.md` (now also the PyPI page) and `CONTRIBUTING.md`.
+- Releases now publish to PyPI automatically through Trusted Publishing when a version tag is pushed.
+
 ## [1.0.0] - 2026-09-29
 
 First stable release: a rewrite on Datalab's current Convert API with a scriptable, re-runnable CLI. See "Upgrading from 0.x" in the README.

@@ -83,12 +83,9 @@ jobs:
           fi
 
   pypi:
-    # Uses PyPI Trusted Publishing (no stored token). One-time setup on pypi.org:
-    # project → Settings → Publishing → add GitHub publisher with workflow
-    # "release.yml" and environment "pypi". Then set the repository variable
-    # PYPI_PUBLISH=true to enable this job.
+    # PyPI Trusted Publishing: pypi.org trusts this repository's release.yml,
+    # so no API token is stored anywhere.
     needs: build
-    if: vars.PYPI_PUBLISH == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi

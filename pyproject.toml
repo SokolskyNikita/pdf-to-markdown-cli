@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdf-to-markdown-cli"
-version = "1.0.0"
+version = "1.0.1"
 description = "Convert PDFs, Office documents, ebooks, and images to Markdown, HTML, or JSON with the Datalab API."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
@@ -72,7 +72,8 @@ namespaces = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not live'"
+markers = ["live: end-to-end tests that call the real Datalab API (run with: pytest -m live)"]
 
 [tool.coverage.run]
 source = ["docs_to_md"]
