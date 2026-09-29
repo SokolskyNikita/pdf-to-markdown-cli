@@ -5,7 +5,7 @@ conversion output:
 
     DATALAB_API_KEY=... pytest -m live
 
-A full run converts about 20 pages (a few cents).
+A full run converts about 25 pages (a few cents).
 """
 
 from __future__ import annotations

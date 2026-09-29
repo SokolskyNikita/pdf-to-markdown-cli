@@ -23,6 +23,7 @@ class Config:
     output_dir: Path | None = None
     output_format: str = "markdown"
     mode: str | None = None
+    model: str | None = None  # None means the backend's default model
     paginate: bool = False
     disable_image_extraction: bool = False
     disable_image_captions: bool = False
@@ -53,6 +54,8 @@ class Config:
         if self.mode is not None and self.mode not in info.modes:
             choices = f" (choose from {', '.join(info.modes)})" if info.modes else ""
             raise ConfigurationError(f"Unsupported mode for {info.label}: {self.mode}{choices}")
+        if self.model is not None and info.default_model is None:
+            raise ConfigurationError(f"The {info.label} backend does not take --model")
         if self.chunk_size is not None and self.chunk_size < 1:
             raise ConfigurationError("--chunk-size must be at least 1")
         if self.max_pages is not None and self.max_pages < 1:

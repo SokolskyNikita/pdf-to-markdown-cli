@@ -7,40 +7,7 @@ from docs_to_md.backends.datalab.client import MAX_ATTEMPTS, DatalabClient
 from docs_to_md.backends.datalab.models import ConvertOptions
 from docs_to_md.errors import APIError, Cancelled, FatalAPIError, RetryableAPIError
 
-
-class FakeResponse:
-    def __init__(self, status_code=200, payload=None, headers=None, text=None):
-        self.status_code = status_code
-        self._payload = payload
-        self.headers = headers or {}
-        self.text = text if text is not None else ""
-        self.reason = "reason"
-
-    def json(self):
-        if self._payload is None:
-            raise ValueError("no json")
-        return self._payload
-
-
-class FakeSession:
-    def __init__(self, *responses):
-        self.responses = list(responses)
-        self.calls: list = []
-
-    def _next(self, method, url, **kwargs):
-        self.calls.append((method, url, kwargs))
-        response = self.responses.pop(0)
-        if isinstance(response, Exception):
-            raise response
-        return response
-
-    def post(self, url, **kwargs):
-        if "files" in kwargs:
-            kwargs["file_bytes"] = kwargs["files"]["file"][1].read()
-        return self._next("POST", url, **kwargs)
-
-    def get(self, url, **kwargs):
-        return self._next("GET", url, **kwargs)
+from .conftest import FakeResponse, FakeSession
 
 
 @pytest.fixture

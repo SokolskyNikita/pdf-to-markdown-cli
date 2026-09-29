@@ -1,4 +1,4 @@
-"""Convert documents to Markdown, HTML, or JSON with the Datalab API."""
+"""Convert documents to Markdown, HTML, or JSON with the Datalab API or GPT-Luna."""
 
 from importlib.metadata import PackageNotFoundError, version
 

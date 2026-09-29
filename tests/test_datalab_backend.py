@@ -39,7 +39,7 @@ def run(inputs, console, client=None, **overrides):
 
 def test_is_the_default_backend():
     assert DEFAULT_BACKEND == "datalab"
-    assert {"datalab": DatalabBackend} == BACKENDS
+    assert BACKENDS["datalab"] is DatalabBackend
     assert get_backend("datalab") is DatalabBackend
 
 

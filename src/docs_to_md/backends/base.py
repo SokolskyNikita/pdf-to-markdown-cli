@@ -33,6 +33,8 @@ class BackendInfo:
     output_formats: frozenset[str]  # keys of assemble.OUTPUT_EXTENSIONS
     modes: tuple[str, ...] = ()  # accepted --mode values
     max_upload_bytes: int | None = None  # limit for a document sent whole
+    chunk_size: int = 25  # default --chunk-size (PDF pages per request)
+    default_model: str | None = None  # None if the backend takes no --model
     api_key_env_vars: tuple[str, ...] = ()  # lookup order; empty if no key is needed
     api_key_url: str | None = None  # where to get a key
 

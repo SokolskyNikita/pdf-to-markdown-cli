@@ -8,6 +8,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-29
+
+### Added
+
+- GPT-Luna backends: `--backend openai` transcribes PDFs and images with OpenAI's `gpt-6-luna` through the Responses API, and `--backend openrouter` uses the same model through OpenRouter. They read `OPENAI_API_KEY` and `OPENROUTER_API_KEY`, write Markdown or HTML, describe figures in text, and report each file's cost from the token usage. Datalab remains the default.
+- `--model` picks the model for backends that offer a choice, e.g. `--model gpt-5.6-luna`.
+- Five hard samples with reference outputs: Lane's Arabic-English lexicon (1863), Gesenius' Hebrew grammar (1898), the Loeb Greek/English *Odyssey* (1919), a Devanagari *Bhagavad-Gita* (1922), and Newton's *Principia* (1687).
+- `tests/test_live_llm.py`: live tests of every sample through both GPT-Luna routes.
+
+### Changed
+
+- The default `--chunk-size` now depends on the backend: 25 pages for Datalab (unchanged) and 5 for GPT-Luna.
+- `--api-option` values are passed to whichever backend runs. GPT-Luna backends add them to the request body and decode JSON values.
+
 ## [1.2.0] - 2026-09-29
 
 ### Added

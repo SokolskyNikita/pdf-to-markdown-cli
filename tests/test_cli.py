@@ -42,7 +42,7 @@ def parse(*argv):
 def test_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("DATALAB_API_KEY", "env-key")
     config, console = parse(str(tmp_path))
-    assert config.backend == "datalab"
+    assert config.backend == "datalab"  # GPT-Luna only runs when asked for
     assert config.api_key == "env-key"
     assert config.output_format == "markdown"
     assert config.chunk_size == 25
@@ -122,6 +122,46 @@ def test_backend_option(tmp_path):
     assert parse(str(tmp_path), "-n", "--backend", "datalab")[0].backend == "datalab"
     with pytest.raises(SystemExit):
         parse(str(tmp_path), "-n", "--backend", "nope")
+
+
+def test_llm_backends(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or")
+    config, _ = parse(str(tmp_path), "--backend", "openai")
+    assert (config.backend, config.api_key, config.chunk_size, config.model) == (
+        "openai",
+        "sk-openai",
+        5,
+        None,
+    )
+    config, _ = parse(
+        str(tmp_path), "--backend", "openrouter", "--model", "gpt-5.6-luna", "--chunk-size", "2"
+    )
+    assert (config.backend, config.api_key, config.chunk_size, config.model) == (
+        "openrouter",
+        "sk-or",
+        2,
+        "gpt-5.6-luna",
+    )
+    with pytest.raises(ConfigurationError, match="--chunk-size must be at least 1"):
+        parse(str(tmp_path), "--backend", "openai", "--chunk-size", "0")
+    with pytest.raises(ConfigurationError, match="does not take --model"):
+        parse(str(tmp_path), "-n", "--model", "gpt-6-luna")
+
+
+def test_llm_keys_do_not_change_the_default_backend(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or")
+    with pytest.raises(ConfigurationError, match="DATALAB_API_KEY"):
+        parse(str(tmp_path))
+    monkeypatch.setenv("DATALAB_API_KEY", "dl")
+    config, _ = parse(str(tmp_path))
+    assert (config.backend, config.api_key, config.chunk_size, config.model) == ("datalab", "dl", 25, None)
+
+
+def test_missing_llm_key_names_the_variable(tmp_path):
+    with pytest.raises(ConfigurationError, match="OPENAI_API_KEY"):
+        parse(str(tmp_path), "--backend", "openai")
 
 
 def test_bad_api_option_is_rejected(tmp_path):

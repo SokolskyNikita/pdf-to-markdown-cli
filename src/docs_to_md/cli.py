@@ -13,8 +13,8 @@ from pathlib import Path
 from docs_to_md import __version__
 from docs_to_md.assemble import OUTPUT_EXTENSIONS
 from docs_to_md.backends import BACKENDS, DEFAULT_BACKEND, get_backend
+from docs_to_md.backends.openai import OpenAIBackend
 from docs_to_md.config import (
-    DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENCY,
     DEFAULT_TIMEOUT_SECONDS,
     Config,
@@ -38,6 +38,9 @@ examples:
   pdf-to-md scan.pdf --mode accurate    highest quality (slower, costs more)
   pdf-to-md book.pdf --page-range 0-9   first ten pages only (0-based)
   pdf-to-md *.docx --html --overwrite   re-convert, replacing existing outputs
+  pdf-to-md scan.pdf --backend openai   transcribe with GPT-Luna instead
+  pdf-to-md scan.pdf --backend openrouter
+                                        the same, through OpenRouter
 
 Existing outputs are skipped unless --overwrite is given, so re-running a
 command only converts what is missing. Converted file paths are printed to
@@ -45,6 +48,8 @@ stdout; progress and errors go to stderr.
 
 environment:
   DATALAB_API_KEY    Datalab API key (MARKER_PDF_KEY is also accepted)
+  OPENAI_API_KEY     OpenAI API key, for --backend openai
+  OPENROUTER_API_KEY OpenRouter API key, for --backend openrouter
   NO_COLOR           disable colored output
 
 exit status:
@@ -65,8 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="pdf-to-md",
         description=(
             "Convert PDFs, Office documents, ebooks, and images to Markdown, HTML,\n"
-            "or JSON with the Datalab API. Large PDFs are split into chunks that\n"
-            "convert in parallel and are stitched back together."
+            "or JSON with the Datalab API, or transcribe PDFs and images with an\n"
+            "OpenAI model (GPT-Luna), directly or through OpenRouter. Large PDFs\n"
+            "are split into chunks that convert in parallel and are stitched back\n"
+            "together."
         ),
         epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -120,7 +127,11 @@ def build_parser() -> argparse.ArgumentParser:
         "-m",
         "--mode",
         choices=tuple(dict.fromkeys(mode for backend in BACKENDS.values() for mode in backend.info.modes)),
-        help="quality/speed trade-off; Datalab defaults to fast",
+        help="quality/speed trade-off; Datalab defaults to fast, OpenAI and OpenRouter to balanced",
+    )
+    conv.add_argument(
+        "--model",
+        help=f"model for backends that offer a choice (OpenAI default: {OpenAIBackend.info.default_model})",
     )
     conv.add_argument("--paginate", action="store_true", help="insert page separators in the output")
     conv.add_argument(
@@ -132,7 +143,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not generate descriptions for images",
     )
-    conv.add_argument("--skip-cache", action="store_true", help="ignore Datalab's server-side result cache")
+    conv.add_argument(
+        "--skip-cache", action="store_true", help="ignore Datalab's server-side result cache (Datalab only)"
+    )
     conv.add_argument(
         "--api-option",
         dest="api_options",
@@ -140,23 +153,23 @@ def build_parser() -> argparse.ArgumentParser:
         type=_key_value,
         default=[],
         metavar="KEY=VALUE",
-        help="pass any other Convert API form field (repeatable)",
+        help="pass any other API field to the backend, e.g. service_tier=flex (repeatable)",
     )
 
     pages = parser.add_argument_group("pages and chunking")
     pages.add_argument("--page-range", metavar="RANGE", help="0-based pages to convert, e.g. '0,5-10'")
     pages.add_argument("--max-pages", type=int, metavar="N", help="convert at most N pages per document")
+    chunk_defaults = ", ".join(f"{b.info.chunk_size} for {b.info.label}" for b in BACKENDS.values())
     pages.add_argument(
         "--chunk-size",
         type=int,
-        default=DEFAULT_CHUNK_SIZE,
         metavar="N",
-        help=f"PDF pages per API request (default: {DEFAULT_CHUNK_SIZE})",
+        help=f"PDF pages per API request (default: {chunk_defaults})",
     )
     pages.add_argument("--no-chunk", action="store_true", help="send each PDF as a single request")
 
     run = parser.add_argument_group("run control")
-    run.add_argument("--api-key", metavar="KEY", help="Datalab API key (prefer the DATALAB_API_KEY env var)")
+    run.add_argument("--api-key", metavar="KEY", help="API key (prefer the environment variables below)")
     run.add_argument(
         "-j",
         "--concurrency",
@@ -217,6 +230,7 @@ def config_from_args(args: argparse.Namespace, console: Console) -> Config:
             console.warning(f"{flag} is no longer supported by the Datalab API and is ignored")
 
     backend = get_backend(args.backend)
+    chunk_size = backend.info.chunk_size if args.chunk_size is None else args.chunk_size
     return Config(
         inputs=list(args.inputs),
         backend=backend.info.name,
@@ -224,13 +238,14 @@ def config_from_args(args: argparse.Namespace, console: Console) -> Config:
         output_dir=args.output_dir,
         output_format=args.output_format,
         mode=mode,
+        model=args.model,
         paginate=args.paginate,
         disable_image_extraction=args.disable_image_extraction,
         disable_image_captions=args.disable_image_captions,
         skip_cache=args.skip_cache,
         page_range=args.page_range,
         max_pages=args.max_pages,
-        chunk_size=None if args.no_chunk else args.chunk_size,
+        chunk_size=None if args.no_chunk else chunk_size,
         concurrency=args.concurrency,
         timeout=args.timeout,
         overwrite=args.overwrite,

@@ -12,7 +12,7 @@
   <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
 </p>
 
-`pdf-to-md` is a command-line tool that converts documents to Markdown, HTML, or JSON with the [Datalab](https://www.datalab.to/) Convert API, the hosted version of the open-source [Marker](https://github.com/datalab-to/marker) engine. It handles the tedious parts for you: splitting big PDFs, uploading in parallel, retrying, stitching the results back together, and fixing page numbers and image links.
+`pdf-to-md` is a command-line tool that converts documents to Markdown, HTML, or JSON with the [Datalab](https://www.datalab.to/) Convert API, the hosted version of the open-source [Marker](https://github.com/datalab-to/marker) engine. It can also transcribe PDFs and images with OpenAI's GPT-Luna, called [directly or through OpenRouter](#transcribing-with-gpt-luna). It handles the tedious parts for you: splitting big PDFs, uploading in parallel, retrying, stitching the results back together, and fixing page numbers and image links.
 
 ```console
 $ pdf-to-md books/
@@ -31,7 +31,7 @@ Done in 4m37s: 3 converted · 1563 pages · $4.69
 - **Honest about results.** Every file reports its pages and cost. The exit code says whether anything failed. A bad API key stops the run immediately instead of failing file by file.
 - **Resilient.** Rate limits, server errors, and dropped connections are retried with backoff. Ctrl-C stops cleanly without leaving half-written files.
 - **Made for scripting.** Converted paths go to stdout, progress and errors to stderr, so it drops straight into pipelines and CI jobs.
-- **Any language, any era.** Tested on modern PDFs, math, statistical tables from a faded microfiche, and scans of Cyrillic, blackletter German, and vertical classical Chinese ([samples](#sample-conversions)).
+- **Any language, any era.** Tested on modern PDFs, math, statistical tables from a faded microfiche, and scans of Cyrillic, blackletter German, vertical classical Chinese, Arabic, Hebrew, polytonic Greek, Devanagari, and 1687 Latin ([samples](#sample-conversions)).
 
 ## Installation
 
@@ -48,6 +48,8 @@ Then get an API key from [datalab.to/app/keys](https://www.datalab.to/app/keys) 
 ```bash
 export DATALAB_API_KEY="your_api_key"
 ```
+
+To use GPT-Luna instead, export `OPENAI_API_KEY` or `OPENROUTER_API_KEY` and pass `--backend openai` or `--backend openrouter`.
 
 ## Quick start
 
@@ -83,6 +85,10 @@ pdf-to-md contract.pdf --paginate
 pdf-to-md manual.pdf --no-images \
   --no-image-captions
 
+# Transcribe with GPT-Luna
+pdf-to-md scan.pdf --backend openai
+pdf-to-md scan.pdf --backend openrouter
+
 # Redo everything, replacing old outputs
 pdf-to-md ~/papers --overwrite
 
@@ -93,8 +99,8 @@ pdf-to-md ~/papers -q | xargs wc -w
 ## How it works
 
 1. **Plan.** Inputs are discovered recursively. Hidden files and folders this tool generated earlier are ignored. Each input gets a deterministic output path, and inputs whose output already exists are skipped.
-2. **Split.** PDFs are cut into chunks of `--chunk-size` pages (default 25). Page selection with `--page-range` or `--max-pages` happens here, so only those pages are uploaded and billed. Other formats are uploaded whole.
-3. **Convert.** Up to `--concurrency` chunks (default 5) are processed at once. Each one is uploaded and then polled until it's done. Throttling and server errors are retried, honoring the API's `Retry-After`.
+2. **Split.** PDFs are cut into chunks of `--chunk-size` pages (default 25 for Datalab, 5 for GPT-Luna). Page selection with `--page-range` or `--max-pages` happens here, so only those pages are uploaded and billed. Other formats are uploaded whole.
+3. **Convert.** Up to `--concurrency` chunks (default 5) are processed at once. Each one is uploaded, then polled until it's done (Datalab) or answered in one request (GPT-Luna). Throttling and server errors are retried, honoring the API's `Retry-After`.
 4. **Merge.** Chunk results are joined in page order. Page separators, HTML page ids, JSON block ids, and in-document anchors are renumbered to match the original document. Images are renamed so they never collide, and links to them are URL-encoded.
 5. **Write.** The output is written to a temporary file and renamed into place, so an interrupted run never leaves a partial file behind.
 
@@ -137,6 +143,28 @@ Every result line shows what Datalab billed, and the run summary adds it up. In 
 
 Throughput depends on your plan's limits. With the default of 5 concurrent requests (the free tier's limit), the 1,563-page run above took 4 minutes 37 seconds. Paid plans allow far more concurrency, so raise `-j` to match yours.
 
+## Transcribing with GPT-Luna
+
+`--backend openai` sends each chunk to OpenAI's [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), a low-cost vision model, through the Responses API. `--backend openrouter` sends the same request to the same model through [OpenRouter](https://openrouter.ai/openai/gpt-6-luna). The model sees each page's image and its text layer and writes one transcription per page. The tool checks that it got exactly one page back for every page sent, then merges the pages the same way as Datalab results.
+
+| | Datalab (default) | GPT-Luna |
+| --- | --- | --- |
+| Inputs | PDFs, Office, ebooks, images | PDFs and images |
+| Outputs | Markdown, HTML, JSON | Markdown, HTML |
+| Figures | Extracted as image files | Described in text |
+| Pages per request | 25 | 5 |
+| `--mode` | Datalab processing mode | Reasoning effort |
+
+Datalab remains the default. GPT-Luna runs only when you choose it with `--backend`.
+
+In September 2026 test runs, GPT-Luna transcribed all 25 sample pages for about 2¢ on either route. That's 0.08¢ per page on average and about 0.2¢ for the dense census tables, versus about 0.3¢ per page on Datalab. Both routes bill the same token rates, and results show the cost of each file. For half price in exchange for slower responses, add `--api-option service_tier=flex` (OpenAI only).
+
+`--mode` maps to reasoning effort: `fast` is none, `balanced` (the default) is low, and `accurate` is medium. In `balanced` mode every sample passed its checks, including the 1880 microfiche table that needs Datalab's `accurate` mode. As with any language model, output can vary between runs: in repeated tests it occasionally dropped a heading label or a LaTeX backslash.
+
+`--model` picks another model, such as `gpt-5.6-luna`. OpenRouter adds the `openai/` prefix when the name has none, so the same flag works on both routes. `--api-option KEY=VALUE` adds any other Responses API field, with JSON values decoded, e.g. `--api-option max_output_tokens=32000`.
+
+Keep chunks small. In testing, a 16-page request came back with pages split apart, while 5- and 8-page chunks were exact. If a chunk comes back with the wrong page count, it's retried once, then the file fails with a hint to lower `--chunk-size`.
+
 ## Sample conversions
 
 [`examples/`](https://github.com/SokolskyNikita/pdf-to-markdown-cli/tree/main/examples) holds sample documents next to their actual output from this tool:
@@ -151,6 +179,11 @@ Throughput depends on your plan's limits. With the default of 5 concurrent reque
 | [*Shijing Gupu* (1908)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/shijing_gupu_zh.md) | Chinese | Vertical text, music notation |
 | [1880 Census tables](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/census_1880_tables_en.md) | English | Microfiche scan, side-by-side tables |
 | [1980 Census ancestry](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/census_1980_ancestry_en.md) | English | Dense table, two-level headers |
+| [Lane's *Arabic-English Lexicon* (1863)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/lane_arabic_english_lexicon_ar.md) | Arabic, English | Three columns, vocalized Arabic inline |
+| [Gesenius' *Hebrew Grammar* (1898)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/gesenius_hebrew_grammar_he.md) | Hebrew, English | Pointed Hebrew paradigms, margin letters |
+| [Loeb *Odyssey* (1919)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/homer_odyssey_loeb_grc.md) | Greek, English | Polytonic Greek, critical apparatus |
+| [*Bhagavad-Gita* (1922)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/besant_bhagavad_gita_sa.md) | Sanskrit, English | Devanagari on a cropped scan |
+| [Newton's *Principia* (1687)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/newton_principia_la.md) | Latin | Long s, ligatures, inline diagram |
 
 See [examples/README.md](https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/examples/README.md) for sources and how the samples are used in tests.
 
@@ -175,13 +208,14 @@ pdf-to-md INPUT [INPUT ...] [options]
 
 | Option | Description |
 | --- | --- |
-| `--backend NAME` | Conversion service. Default and currently only choice: `datalab`. |
-| `-m`, `--mode MODE` | `fast` (the API default), `balanced`, or `accurate`. |
+| `--backend NAME` | `datalab` (default), `openai`, or `openrouter`. |
+| `-m`, `--mode MODE` | `fast`, `balanced`, or `accurate`. Defaults to `fast` on Datalab and `balanced` on GPT-Luna. |
+| `--model NAME` | GPT-Luna backends only. Default: `gpt-6-luna`. |
 | `--paginate` | Insert page separators. |
 | `--no-images` | Don't extract images. |
 | `--no-image-captions` | Don't generate image descriptions. |
 | `--skip-cache` | Ignore Datalab's server-side cache of previous results. |
-| `--api-option KEY=VALUE` | Send any other [Convert API](https://documentation.datalab.to/api-reference/convert-document) field. Repeatable, e.g. `--api-option extras=extract_links`. |
+| `--api-option KEY=VALUE` | Send any other API field: a [Convert API](https://documentation.datalab.to/api-reference/convert-document) form field, or a Responses API field for GPT-Luna. Repeatable, e.g. `--api-option extras=extract_links`. |
 
 **Pages and chunking**
 
@@ -189,7 +223,7 @@ pdf-to-md INPUT [INPUT ...] [options]
 | --- | --- |
 | `--page-range RANGE` | 0-based pages to convert, e.g. `0,5-10`. |
 | `--max-pages N` | Convert at most `N` pages of each document. |
-| `--chunk-size N` | PDF pages per request. Default: `25`. Smaller chunks mean more parallelism but more requests. |
+| `--chunk-size N` | PDF pages per request. Default: `25` on Datalab, `5` on GPT-Luna. Smaller chunks mean more parallelism but more requests. |
 | `--no-chunk` | Send each PDF as one request. |
 
 **Run control**
@@ -221,18 +255,22 @@ Because finished files are skipped, the simplest way to retry failures in an int
 
 | Variable | Purpose |
 | --- | --- |
-| `DATALAB_API_KEY` | API key, the same variable Datalab's SDK uses. The pre-1.0 name `MARKER_PDF_KEY` also works. `--api-key` overrides both. |
+| `DATALAB_API_KEY` | API key, the same variable Datalab's SDK uses. The pre-1.0 name `MARKER_PDF_KEY` also works. |
+| `OPENAI_API_KEY` | OpenAI API key, for `--backend openai`. |
+| `OPENROUTER_API_KEY` | OpenRouter API key, for `--backend openrouter`. |
 | `NO_COLOR` | Disable colored output. |
 
-The tool keeps no state between runs. Temporary chunk files live in the system temp directory and are deleted when the run ends.
+`--api-key` overrides whichever variable the chosen backend reads. The tool keeps no state between runs. Temporary chunk files live in the system temp directory and are deleted when the run ends.
 
 ## Troubleshooting
 
 | Message | What to do |
 | --- | --- |
-| `No API key found` | Set `DATALAB_API_KEY`. |
-| `Authentication failed` | The key was rejected. Check it on the [Datalab dashboard](https://www.datalab.to/app/keys). |
+| `No API key found` | Set the backend's key variable (see [Configuration](#configuration)). |
+| `Authentication failed` | The key was rejected. Check it on the [Datalab](https://www.datalab.to/app/keys), [OpenAI](https://platform.openai.com/api-keys), or [OpenRouter](https://openrouter.ai/settings/keys) dashboard. |
 | `Payment required` | Your Datalab account is out of credits. |
+| `out of credits or over quota` | Your OpenAI or OpenRouter account needs credits or a higher spend limit. |
+| `returned N pages for M` | GPT-Luna merged or split pages. Lower `--chunk-size`. |
 | `exists (use --overwrite)` | The output is already there. Add `--overwrite` to redo it. |
 | `timed out` | A request took longer than `--timeout`. Raise it, or lower `--chunk-size`. |
 | Frequent throttling | You're above your plan's limits (the free tier allows 10 requests per minute). Lower `-j`. |
@@ -257,7 +295,7 @@ Bug reports, ideas, and pull requests are welcome. [CONTRIBUTING.md](https://git
 
 ## Acknowledgements
 
-Conversion quality comes from [Marker](https://github.com/datalab-to/marker) and the [Datalab](https://www.datalab.to/) API. This is an independent project and isn't affiliated with Datalab.
+Conversion quality comes from [Marker](https://github.com/datalab-to/marker) and the [Datalab](https://www.datalab.to/) API, or from OpenAI's GPT-Luna. This is an independent project and isn't affiliated with Datalab, OpenAI, or OpenRouter.
 
 ## License
 

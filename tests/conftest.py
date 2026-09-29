@@ -139,3 +139,42 @@ class FakeClient:
     def sleep(self, seconds):
         if self.stop_event.is_set():
             raise Cancelled("Interrupted")
+
+
+class FakeResponse:
+    """A ``requests.Response`` stand-in for HTTP client tests."""
+
+    def __init__(self, status_code=200, payload=None, headers=None, text=None):
+        self.status_code = status_code
+        self._payload = payload
+        self.headers = headers or {}
+        self.text = text if text is not None else ""
+        self.reason = "reason"
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json")
+        return self._payload
+
+
+class FakeSession:
+    """A ``requests.Session`` that replays ``responses`` (or raises them) in order."""
+
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls: list = []
+
+    def _next(self, method, url, **kwargs):
+        self.calls.append((method, url, kwargs))
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def post(self, url, **kwargs):
+        if "files" in kwargs:
+            kwargs["file_bytes"] = kwargs["files"]["file"][1].read()
+        return self._next("POST", url, **kwargs)
+
+    def get(self, url, **kwargs):
+        return self._next("GET", url, **kwargs)
