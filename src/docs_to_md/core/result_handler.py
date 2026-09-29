@@ -31,12 +31,119 @@ CHUNK_RETRY_MAX_DELAY_SECONDS = 60
 class ResultSaver:
     """Handles saving combined results and moving assets."""
 
+    _FENCE_PATTERN = re.compile(r"^\s{0,3}(?:`{3,}|~{3,})")
+    _HEADER_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s")
+    _BLOCKQUOTE_PATTERN = re.compile(r"^\s{0,3}>")
+    _UNORDERED_LIST_PATTERN = re.compile(r"^\s{0,3}[*+-]\s+")
+    _ORDERED_LIST_PATTERN = re.compile(r"^\s{0,3}\d+[.)]\s+")
+    _LINK_DEF_PATTERN = re.compile(r"^\s{0,3}\[[^\]]+\]:\s+\S+")
+    _SETEXT_HEADING_PATTERN = re.compile(r"^\s{0,3}(?:=+|-+)\s*$")
+    _THEMATIC_BREAK_PATTERN = re.compile(r"^\s{0,3}([-*_])(?:\s*\1){2,}\s*$")
+    _TABLE_LINE_PATTERN = re.compile(r"^\s*\|.*\|\s*$")
+    _HTML_BLOCK_PATTERN = re.compile(r"^\s*<[^>]+>")
+    _SENTENCE_END_PATTERN = re.compile(r"[.!?][\"')\]]*$")
+
     def save_content(self, content: str, path: Path) -> None:
         try:
             ensure_directory(path.parent)
             FileIO.write_file(path, content)
         except Exception as e:
             raise ResultProcessingError(f"Failed to save content to {path}: {e}") from e
+
+    def _is_fence_line(self, line: str) -> bool:
+        return bool(self._FENCE_PATTERN.match(line))
+
+    def _is_markdown_structure_line(self, line: str) -> bool:
+        if not line.strip():
+            return False
+        if line.startswith("\t") or line.startswith("    "):
+            return True
+        return any(
+            pattern.match(line)
+            for pattern in (
+                self._HEADER_PATTERN,
+                self._BLOCKQUOTE_PATTERN,
+                self._UNORDERED_LIST_PATTERN,
+                self._ORDERED_LIST_PATTERN,
+                self._LINK_DEF_PATTERN,
+                self._SETEXT_HEADING_PATTERN,
+                self._THEMATIC_BREAK_PATTERN,
+                self._TABLE_LINE_PATTERN,
+                self._HTML_BLOCK_PATTERN,
+            )
+        )
+
+    def _should_join_paragraph_block(self, block_lines: List[str]) -> bool:
+        if len(block_lines) < 2:
+            return False
+
+        if any(self._is_markdown_structure_line(line) for line in block_lines):
+            return False
+
+        if any(
+            line.endswith("  ") or line.rstrip().endswith("\\")
+            for line in block_lines[:-1]
+        ):
+            return False
+
+        stripped_lengths = [len(line.strip()) for line in block_lines if line.strip()]
+        if not stripped_lengths:
+            return False
+
+        average_length = sum(stripped_lengths) / len(stripped_lengths)
+        if average_length < 35:
+            return False
+
+        # A wrapped paragraph usually has at least one non-final line that does
+        # not terminate a sentence.
+        return any(
+            not self._SENTENCE_END_PATTERN.search(line.strip())
+            for line in block_lines[:-1]
+        )
+
+    def normalize_markdown_line_breaks(self, content: str) -> str:
+        if not content:
+            return content
+
+        trailing_newline = content.endswith("\n")
+        lines = content.splitlines()
+        normalized_lines: List[str] = []
+        current_block: List[str] = []
+        in_fenced_block = False
+
+        def flush_current_block() -> None:
+            if not current_block:
+                return
+            if self._should_join_paragraph_block(current_block):
+                normalized_lines.append(" ".join(line.strip() for line in current_block))
+            else:
+                normalized_lines.extend(current_block)
+            current_block.clear()
+
+        for line in lines:
+            if self._is_fence_line(line):
+                flush_current_block()
+                normalized_lines.append(line)
+                in_fenced_block = not in_fenced_block
+                continue
+
+            if in_fenced_block:
+                normalized_lines.append(line)
+                continue
+
+            if not line.strip():
+                flush_current_block()
+                normalized_lines.append(line)
+                continue
+
+            current_block.append(line)
+
+        flush_current_block()
+
+        processed = "\n".join(normalized_lines)
+        if trailing_newline:
+            processed += "\n"
+        return processed
 
     def combine_results(self, req: ConversionRequest) -> Tuple[Path, int]:
         output_file = req.target_file
@@ -55,6 +162,7 @@ class ResultSaver:
             else f"Processing single result for {output_file}..."
         )
         total_size = 0
+        should_post_process_markdown = (req.output_format or "").lower() == "markdown"
         try:
             with open(output_file, "w", encoding="utf-8") as outf:
                 if not req.ordered_chunks:
@@ -74,8 +182,13 @@ class ResultSaver:
                         f"Appending chunk {i+1}/{len(req.ordered_chunks)} from {result_path.name}"
                     )
                     with open(result_path, "r", encoding="utf-8") as infile:
-                        shutil.copyfileobj(infile, outf, length=65536)
-                        total_size += result_path.stat().st_size
+                        chunk_content = infile.read()
+                        if should_post_process_markdown:
+                            chunk_content = self.normalize_markdown_line_breaks(
+                                chunk_content
+                            )
+                        outf.write(chunk_content)
+                        total_size += len(chunk_content.encode("utf-8"))
 
                     if i < len(req.ordered_chunks) - 1:
                         outf.write("\n\n")

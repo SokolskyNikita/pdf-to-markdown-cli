@@ -114,5 +114,53 @@ class TestImageDirectoryCreation(unittest.TestCase):
                           f"Images directory {images_dir} should be created when images exist")
 
 
+class TestMarkdownLineBreakNormalization(unittest.TestCase):
+    def setUp(self):
+        self.saver = ResultSaver()
+
+    def test_merges_wrapped_paragraph_lines(self):
+        original = (
+            "This is a long paragraph line that was wrapped by OCR output even though it should stay as one paragraph\n"
+            "because the sentence continues naturally on the next line without any markdown block boundary.\n"
+        )
+        normalized = self.saver.normalize_markdown_line_breaks(original)
+        expected = (
+            "This is a long paragraph line that was wrapped by OCR output even though it should stay as one paragraph "
+            "because the sentence continues naturally on the next line without any markdown block boundary.\n"
+        )
+        self.assertEqual(normalized, expected)
+
+    def test_keeps_list_items_unchanged(self):
+        original = (
+            "- First list entry that should stay on its own line\n"
+            "- Second list entry that should also remain untouched\n"
+        )
+        normalized = self.saver.normalize_markdown_line_breaks(original)
+        self.assertEqual(normalized, original)
+
+    def test_keeps_fenced_code_blocks_unchanged(self):
+        original = (
+            "```python\n"
+            "print('hello')\n"
+            "print('world')\n"
+            "```\n"
+        )
+        normalized = self.saver.normalize_markdown_line_breaks(original)
+        self.assertEqual(normalized, original)
+
+    def test_keeps_hard_breaks_unchanged(self):
+        original = (
+            "This line intentionally uses markdown hard break.  \n"
+            "Second line should remain separate.\n"
+        )
+        normalized = self.saver.normalize_markdown_line_breaks(original)
+        self.assertEqual(normalized, original)
+
+    def test_keeps_short_plain_lines_unchanged(self):
+        original = "Name\nRole\nTeam\n"
+        normalized = self.saver.normalize_markdown_line_breaks(original)
+        self.assertEqual(normalized, original)
+
+
 if __name__ == "__main__":
     unittest.main()
