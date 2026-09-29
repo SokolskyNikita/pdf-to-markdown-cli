@@ -16,9 +16,9 @@
 
 ```console
 $ pdf-to-md books/
-✓ darwin_1859.pdf → darwin_1859.md (516 pages, $1.55)
-✓ tolstoy_1869.pdf → tolstoy_1869.md (537 pages, $1.61)
-✓ grimm_1857.pdf → grimm_1857.md (510 pages, $1.53)
+✓ darwin.pdf → darwin.md (516 pages, $1.55)
+✓ tolstoy.pdf → tolstoy.md (537 pages, $1.61)
+✓ grimm.pdf → grimm.md (510 pages, $1.53)
 Done in 4m37s: 3 converted · 1563 pages · $4.69
 ```
 
@@ -35,13 +35,13 @@ Done in 4m37s: 3 converted · 1563 pages · $4.69
 
 ## Installation
 
-Requires Python 3.10 or newer.
+Requires Python 3.10 or newer. [pipx](https://pipx.pypa.io/) installs it in its own isolated environment:
 
 ```bash
-pipx install pdf-to-markdown-cli     # recommended
-uv tool install pdf-to-markdown-cli  # or with uv
-pip install pdf-to-markdown-cli      # or with pip
+pipx install pdf-to-markdown-cli
 ```
+
+`uv tool install pdf-to-markdown-cli` and `pip install pdf-to-markdown-cli` work too.
 
 Then get an API key from [datalab.to/app/keys](https://www.datalab.to/app/keys) and export it:
 
@@ -60,32 +60,33 @@ This writes `report.md` next to the PDF, plus a `report_images/` folder if the d
 ## Recipes
 
 ```bash
-# Convert a folder tree into a separate, mirrored output folder
+# Mirror a folder tree elsewhere
 pdf-to-md ~/papers -o ~/papers-md
 
-# Preview files, pages, and chunks without spending credits
+# Preview files and pages, at no cost
 pdf-to-md ~/papers --dry-run
 
-# Best quality for difficult scans, tables, and handwriting
+# Best quality for hard scans and tables
 pdf-to-md scan.pdf --mode accurate
 
-# Only some pages (0-based, like the API): the first ten plus page 42
+# First ten pages plus page 42 (0-based)
 pdf-to-md book.pdf --page-range 0-9,42
 
 # HTML or JSON instead of Markdown
 pdf-to-md slides.pptx --html
 pdf-to-md form.pdf --json
 
-# Keep page boundaries visible in the output
+# Mark page boundaries in the output
 pdf-to-md contract.pdf --paginate
 
-# Text only: no image files, no generated image descriptions
-pdf-to-md manual.pdf --no-images --no-image-captions
+# Text only: no images or descriptions
+pdf-to-md manual.pdf --no-images \
+  --no-image-captions
 
-# Redo everything, replacing earlier outputs
+# Redo everything, replacing old outputs
 pdf-to-md ~/papers --overwrite
 
-# Use the converted files in a pipeline
+# Feed converted files to other tools
 pdf-to-md ~/papers -q | xargs wc -w
 ```
 
@@ -112,8 +113,8 @@ flowchart LR
 ```text
 papers/
 ├── report.pdf
-├── report.md        ← converted document
-└── report_images/   ← images, if any
+├── report.md       ← the document
+└── report_images/  ← images, if any
 ```
 
 - If two inputs would produce the same name (`a.pdf` and `a.docx`), both keep their source extension: `a.pdf.md` and `a.docx.md`. Names are compared case-insensitively, and an output never overwrites an input.
