@@ -23,6 +23,7 @@ It discovers inputs, plans deterministic output paths, and splits PDFs into page
 - OpenAI Responses API and file inputs: <https://developers.openai.com/api/docs/guides/file-inputs>. Append `.md` to any page URL for Markdown. Model prices: <https://developers.openai.com/api/docs/pricing.md>. OpenRouter's compatible API: <https://openrouter.ai/docs/api_reference/responses/overview.md>.
 - Mistral OCR guide: <https://docs.mistral.ai/studio/document-processing/basic_ocr.md> (index at `https://docs.mistral.ai/llms.txt`), OpenAPI spec: <https://docs.mistral.ai/openapi.yaml>, prices: <https://mistral.ai/pricing>.
 - User-facing docs: `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`.
+- Model research (prices, benchmark scores, our sample-test results, and candidates for future remote and local backends): `docs/ocr-models.md`.
 
 ## Module map (`src/docs_to_md/`)
 
