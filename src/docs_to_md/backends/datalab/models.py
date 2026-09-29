@@ -1,4 +1,4 @@
-"""Datalab Convert API data types and supported format tables.
+"""Datalab Convert API data types and supported formats.
 
 Reference: https://documentation.datalab.to/api-reference/convert-document
 """
@@ -9,13 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 MODES = ("fast", "balanced", "accurate")
-
-# Output format -> file extension
-SUPPORTED_FORMAT_EXTENSIONS: dict[str, str] = {
-    "markdown": ".md",
-    "json": ".json",
-    "html": ".html",
-}
+OUTPUT_FORMATS = frozenset({"markdown", "html", "json"})
 
 # Input extension (without dot) -> MIME type sent to the API.
 # https://documentation.datalab.to/docs/common/supportedfiletypes
@@ -44,9 +38,6 @@ INPUT_MIME_TYPES: dict[str, str] = {
     "tiff": "image/tiff",
     "tif": "image/tiff",
 }
-
-SUPPORTED_INPUT_EXTENSIONS = frozenset(INPUT_MIME_TYPES)
-SUPPORTED_MIME_TYPES = frozenset(INPUT_MIME_TYPES.values())
 
 
 @dataclass

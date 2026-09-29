@@ -6,18 +6,18 @@ import glob
 import logging
 import os
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from docs_to_md.assemble import OUTPUT_EXTENSIONS
 from docs_to_md.errors import ConfigurationError
-from docs_to_md.models import SUPPORTED_FORMAT_EXTENSIONS, SUPPORTED_INPUT_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
 IMAGES_DIR_SUFFIX = "_images"
 LEGACY_IMAGES_DIR_PREFIX = "images_"
-_OUTPUT_EXTENSIONS = set(SUPPORTED_FORMAT_EXTENSIONS.values())
+_OUTPUT_EXTENSIONS = set(OUTPUT_EXTENSIONS.values())
 
 
 @dataclass(frozen=True)
@@ -34,8 +34,8 @@ class Job:
         return self.source.suffix.lower() == ".pdf"
 
 
-def is_supported(path: Path) -> bool:
-    return path.suffix.lower().lstrip(".") in SUPPORTED_INPUT_EXTENSIONS
+def is_supported(path: Path, input_extensions: Collection[str]) -> bool:
+    return path.suffix.lower().lstrip(".") in input_extensions
 
 
 def _is_generated_images_dir(path: Path) -> bool:
@@ -56,7 +56,7 @@ def _is_generated_images_dir(path: Path) -> bool:
     return False
 
 
-def _walk(root: Path) -> Iterable[Path]:
+def _walk(root: Path, input_extensions: Collection[str]) -> Iterable[Path]:
     for dirpath, dirnames, filenames in os.walk(root):
         current = Path(dirpath)
         dirnames[:] = sorted(
@@ -64,12 +64,16 @@ def _walk(root: Path) -> Iterable[Path]:
         )
         for name in sorted(filenames):
             path = current / name
-            if not name.startswith(".") and is_supported(path):
+            if not name.startswith(".") and is_supported(path, input_extensions):
                 yield path
 
 
-def discover(inputs: Iterable[Path]) -> list[tuple[Path, Path]]:
-    """Return ``(source, root)`` pairs; ``root`` anchors the relative output path."""
+def discover(inputs: Iterable[Path], input_extensions: Collection[str]) -> list[tuple[Path, Path]]:
+    """Return ``(source, root)`` pairs; ``root`` anchors the relative output path.
+
+    Directories contribute only files whose extension is in ``input_extensions``;
+    a file named explicitly with any other extension is an error.
+    """
     found: list[tuple[Path, Path]] = []
     seen = set()
     for raw in inputs:
@@ -77,14 +81,14 @@ def discover(inputs: Iterable[Path]) -> list[tuple[Path, Path]]:
         if not path.exists():
             raise ConfigurationError(f"Input not found: {raw}")
         if path.is_dir():
-            pairs = [(p, path) for p in _walk(path)]
+            pairs = [(p, path) for p in _walk(path, input_extensions)]
             if not pairs:
                 logger.warning("No supported files found in %s", raw)
-        elif is_supported(path):
+        elif is_supported(path, input_extensions):
             pairs = [(path, path.parent)]
         else:
             raise ConfigurationError(
-                f"Unsupported file type: {raw} (supported: {', '.join(sorted(SUPPORTED_INPUT_EXTENSIONS))})"
+                f"Unsupported file type: {raw} (supported: {', '.join(sorted(input_extensions))})"
             )
         for source, root in pairs:
             if source not in seen:
@@ -101,8 +105,16 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-def plan_jobs(inputs: Iterable[Path], output_format: str, output_dir: Path | None = None) -> list[Job]:
-    """Discover inputs and assign each a deterministic output path.
+def plan_jobs(
+    inputs: Iterable[Path],
+    output_format: str,
+    output_dir: Path | None = None,
+    *,
+    input_extensions: Collection[str],
+) -> list[Job]:
+    """Discover inputs the backend accepts and assign each a deterministic output path.
+
+    ``input_extensions`` comes from the backend's ``BackendInfo``.
 
     ``report.pdf`` becomes ``report.md`` with images in ``report_images/``. When
     two inputs would produce the same output (``a.pdf`` and ``a.docx``), both keep
@@ -114,8 +126,8 @@ def plan_jobs(inputs: Iterable[Path], output_format: str, output_dir: Path | Non
     Files recognizably written by an earlier run for another input are skipped, so
     re-running never converts its own results.
     """
-    ext = SUPPORTED_FORMAT_EXTENSIONS[output_format]
-    sources = discover(inputs)
+    ext = OUTPUT_EXTENSIONS[output_format]
+    sources = discover(inputs, input_extensions)
 
     def target_dir(source: Path, root: Path) -> Path:
         if output_dir is None:

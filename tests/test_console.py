@@ -3,8 +3,10 @@ import logging
 import subprocess
 import sys
 
+import pytest
+
 from docs_to_md import __version__
-from docs_to_md.console import Console, setup_logging
+from docs_to_md.console import Console, format_cost, format_elapsed, setup_logging
 
 
 class TtyStream(io.StringIO):
@@ -83,3 +85,13 @@ def test_status_symbols_survive_legacy_encodings():
     Console(stderr=stderr).success("done → there")
     stderr.flush()
     assert raw.getvalue() == b"? done ? there\n"
+
+
+@pytest.mark.parametrize(("cents", "text"), [(0, "$0.00"), (0.3, "$0.0030"), (1, "$0.01"), (1234, "$12.34")])
+def test_format_cost(cents, text):
+    assert format_cost(cents) == text
+
+
+@pytest.mark.parametrize(("seconds", "text"), [(4.25, "4.2s"), (65, "1m05s"), (3600, "60m00s")])
+def test_format_elapsed(seconds, text):
+    assert format_elapsed(seconds) == text

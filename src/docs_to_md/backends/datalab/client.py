@@ -13,13 +13,13 @@ from typing import Any
 
 import requests
 
+from docs_to_md.backends.datalab.models import INPUT_MIME_TYPES, ConvertOptions, ConvertResult
 from docs_to_md.errors import (
     APIError,
     Cancelled,
     FatalAPIError,
     RetryableAPIError,
 )
-from docs_to_md.models import INPUT_MIME_TYPES, ConvertOptions, ConvertResult
 
 logger = logging.getLogger(__name__)
 

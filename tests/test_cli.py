@@ -1,26 +1,36 @@
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
+import docs_to_md.backends.datalab.backend as datalab_backend
 import docs_to_md.cli as cli
 from docs_to_md import __version__
+from docs_to_md.backends import BACKENDS
+from docs_to_md.backends.datalab.models import ConvertResult
 from docs_to_md.config import Config
 from docs_to_md.errors import ConfigurationError, FatalAPIError
 
-from .conftest import CapturingConsole, FakeClient
+from .conftest import CapturingConsole, FakeBackend, FakeClient
 
 
 @pytest.fixture(autouse=True)
 def no_ambient_key(monkeypatch):
-    for name in cli.API_KEY_ENV_VARS:
-        monkeypatch.delenv(name, raising=False)
+    for backend in BACKENDS.values():
+        for name in backend.info.api_key_env_vars:
+            monkeypatch.delenv(name, raising=False)
+
+
+def use_client(monkeypatch, client):
+    """Make the Datalab backend talk to ``client`` instead of the real API."""
+    monkeypatch.setattr(datalab_backend, "DatalabClient", lambda api_key, stop_event: client)
+    return client
 
 
 @pytest.fixture
 def fake_client(monkeypatch):
-    client = FakeClient()
-    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: client)
-    return client
+    return use_client(monkeypatch, FakeClient())
 
 
 def parse(*argv):
@@ -32,6 +42,7 @@ def parse(*argv):
 def test_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("DATALAB_API_KEY", "env-key")
     config, console = parse(str(tmp_path))
+    assert config.backend == "datalab"
     assert config.api_key == "env-key"
     assert config.output_format == "markdown"
     assert config.chunk_size == 25
@@ -107,6 +118,12 @@ def test_no_chunk(tmp_path):
     assert parse(str(tmp_path), "-n", "--no-chunk")[0].chunk_size is None
 
 
+def test_backend_option(tmp_path):
+    assert parse(str(tmp_path), "-n", "--backend", "datalab")[0].backend == "datalab"
+    with pytest.raises(SystemExit):
+        parse(str(tmp_path), "-n", "--backend", "nope")
+
+
 def test_bad_api_option_is_rejected(tmp_path):
     with pytest.raises(SystemExit):
         parse(str(tmp_path), "--api-option", "novalue")
@@ -157,6 +174,35 @@ def test_output_dir_must_be_a_directory(tmp_path):
         parse(str(tmp_path), "-n", "-o", str(file))
 
 
+@pytest.fixture
+def limited_backend(monkeypatch):
+    """Register a keyless backend that only writes Markdown and has no modes."""
+
+    class Limited(FakeBackend):
+        info = dataclasses.replace(FakeBackend.info, name="limited", label="Limited")
+
+    monkeypatch.setitem(BACKENDS, "limited", Limited)
+    return Limited
+
+
+def test_config_is_checked_against_the_backend(tmp_path, limited_backend):
+    limited_backend.info = dataclasses.replace(limited_backend.info, output_formats=frozenset({"markdown"}))
+    assert Config(inputs=[tmp_path], backend="limited").validate().api_key is None  # no key needed
+    with pytest.raises(ConfigurationError, match="Limited backend cannot produce html"):
+        Config(inputs=[tmp_path], backend="limited", output_format="html").validate()
+    with pytest.raises(ConfigurationError, match="Unsupported mode for Limited: fast"):
+        Config(inputs=[tmp_path], backend="limited", mode="fast").validate()
+    with pytest.raises(ConfigurationError, match="Unknown backend"):
+        Config(inputs=[tmp_path], backend="missing").validate()
+
+
+def test_main_runs_any_registered_backend(examples, limited_backend):
+    console = CapturingConsole()
+    assert cli.main([str(examples), "--backend", "limited"], console=console) == cli.EXIT_OK
+    assert (examples / "equations.md").read_text().startswith("# equations.pdf")
+    assert "2 converted" in console.err
+
+
 def test_config_rejects_unknown_values(tmp_path):
     with pytest.raises(ConfigurationError):
         Config(inputs=[tmp_path], api_key="k", output_format="docx").validate()
@@ -197,10 +243,7 @@ def test_main_quiet_prints_only_paths(examples, fake_client, monkeypatch):
 
 
 def test_main_reports_failures_with_exit_code(examples, monkeypatch):
-    from docs_to_md.models import ConvertResult
-
-    client = FakeClient(lambda *a: [ConvertResult(status="failed", error="nope")])
-    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: client)
+    use_client(monkeypatch, FakeClient(lambda *a: [ConvertResult(status="failed", error="nope")]))
     monkeypatch.setenv("DATALAB_API_KEY", "k")
     console = CapturingConsole()
     assert cli.main([str(examples)], console=console) == cli.EXIT_FAILURES
@@ -225,7 +268,7 @@ def test_main_fatal_api_error(examples, monkeypatch):
         def submit(self, path, options):
             raise FatalAPIError("Authentication failed: bad key")
 
-    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: Failing())
+    use_client(monkeypatch, Failing())
     monkeypatch.setenv("DATALAB_API_KEY", "k")
     console = CapturingConsole()
     assert cli.main([str(examples)], console=console) == cli.EXIT_USAGE
@@ -237,7 +280,7 @@ def test_main_interrupted(examples, monkeypatch):
         def submit(self, path, options):
             raise KeyboardInterrupt
 
-    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: Interrupting())
+    use_client(monkeypatch, Interrupting())
     monkeypatch.setenv("DATALAB_API_KEY", "k")
     console = CapturingConsole()
     assert cli.main([str(examples)], console=console) == cli.EXIT_INTERRUPTED

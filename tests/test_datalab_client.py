@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 import requests
 
-from docs_to_md.client import MAX_ATTEMPTS, DatalabClient
+from docs_to_md.backends.datalab.client import MAX_ATTEMPTS, DatalabClient
+from docs_to_md.backends.datalab.models import ConvertOptions
 from docs_to_md.errors import APIError, Cancelled, FatalAPIError, RetryableAPIError
-from docs_to_md.models import ConvertOptions
 
 
 class FakeResponse:

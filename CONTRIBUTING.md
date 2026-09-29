@@ -45,9 +45,10 @@ src/docs_to_md/
 ├── cli.py        arguments, entry point, exit codes, summary
 ├── config.py     validated runtime configuration
 ├── discovery.py  input discovery, deterministic output names
-├── pipeline.py   split, submit concurrently, poll, report
-├── client.py     API client: retries, timeouts, error types
-├── models.py     API request/response types, formats
+├── pipeline.py   split, convert chunks concurrently, report
+├── backends/     conversion backends, selected with --backend
+│   ├── base.py       Backend contract and BackendInfo capabilities
+│   └── datalab/      Datalab Convert API: submit/poll, HTTP client, types
 ├── pdf.py        page ranges and PDF splitting (pikepdf)
 ├── assemble.py   merge chunks, renumber pages, write files
 ├── markdown.py   Markdown clean-up (reflow, captions)
@@ -61,7 +62,8 @@ examples/         sample documents with reference outputs
 
 - Python 3.11+, type-hinted, with `from __future__ import annotations`.
 - Raise exceptions from `errors.py`. Use `FatalAPIError` only for problems that affect every request (bad key, no credits). It aborts the whole run.
-- Keep network code in `client.py` and orchestration in `pipeline.py`. Pipeline tests use `FakeClient` from `tests/conftest.py`. HTTP behavior is tested with the fake session in `tests/test_client.py`.
+- Keep orchestration in `pipeline.py` and everything service-specific in its backend under `backends/`. The pipeline must not know which backend it runs. Pipeline tests use `FakeBackend` from `tests/conftest.py`. Datalab behavior is tested with `FakeClient` in `tests/test_datalab_backend.py`, and HTTP behavior with the fake session in `tests/test_datalab_client.py`.
+- A new backend subclasses `Backend` (`backends/base.py`), declares what it accepts in a `BackendInfo`, and is registered in `BACKENDS` (`backends/__init__.py`).
 - Add tests with every behavior change, in the module's test file. The suite is fast (under a second), so keep it that way.
 - Update the docs in the same pull request: `README.md` for user-facing changes, `CHANGELOG.md` under **Unreleased**, and `AGENTS.md` when the module map or conventions change.
 

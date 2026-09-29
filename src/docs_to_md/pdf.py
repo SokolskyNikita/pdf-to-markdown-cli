@@ -15,11 +15,16 @@ _RANGE_PART = re.compile(r"^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$")
 
 
 @dataclass(frozen=True)
-class PdfChunk:
-    """A slice of a source document submitted as one API request."""
+class Chunk:
+    """A file converted as one backend request.
+
+    For PDFs this is a slice of the source document, and ``pages`` lists the
+    0-based source pages it contains, in order. Other documents are sent whole
+    with empty ``pages``, which leaves page selection to the backend.
+    """
 
     path: Path
-    pages: Sequence[int]  # 0-based page numbers in the source document
+    pages: Sequence[int] = ()
 
     @property
     def first_page(self) -> int:
@@ -76,7 +81,7 @@ def split_pdf(
     chunk_size: int | None,
     page_range: str | None = None,
     max_pages: int | None = None,
-) -> list[PdfChunk]:
+) -> list[Chunk]:
     """Split ``path`` into chunks of at most ``chunk_size`` selected pages.
 
     When every page is selected and fits in a single chunk, the original file is
@@ -90,17 +95,17 @@ def split_pdf(
                 raise PDFProcessingError(f"{path.name} has {total} page(s); none match the requested pages")
             size = chunk_size or len(pages)
             if len(pages) == total and total <= size:
-                return [PdfChunk(path=path, pages=pages)]
+                return [Chunk(path=path, pages=pages)]
 
             groups = [pages[i : i + size] for i in range(0, len(pages), size)]
-            chunks: list[PdfChunk] = []
+            chunks: list[Chunk] = []
             for index, group in enumerate(groups):
                 chunk_path = out_dir / f"{index + 1:04d}of{len(groups):04d}.pdf"
                 with pikepdf.new() as chunk_pdf:
                     for page in group:
                         chunk_pdf.pages.append(pdf.pages[page])
                     chunk_pdf.save(chunk_path)
-                chunks.append(PdfChunk(path=chunk_path, pages=group))
+                chunks.append(Chunk(path=chunk_path, pages=group))
             return chunks
     except pikepdf.PdfError as e:
         raise PDFProcessingError(f"Cannot read PDF {path.name}: {e}") from e

@@ -15,7 +15,7 @@ class PDFProcessingError(DocsToMdError):
 
 
 class APIError(DocsToMdError):
-    """The Datalab API returned an error for a single request."""
+    """A conversion backend failed a single request."""
 
     def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)

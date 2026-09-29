@@ -1,9 +1,4 @@
-from docs_to_md.models import (
-    INPUT_MIME_TYPES,
-    SUPPORTED_INPUT_EXTENSIONS,
-    ConvertOptions,
-    ConvertResult,
-)
+from docs_to_md.backends.datalab.models import ConvertOptions, ConvertResult
 
 
 def test_default_form_only_sends_output_format():
@@ -59,8 +54,3 @@ def test_result_parses_current_api_field_names():
     assert result.error is None
     assert result.images == {}
     assert result.cost_cents == 0.6
-
-
-def test_every_extension_has_a_mime_type():
-    assert set(INPUT_MIME_TYPES) == SUPPORTED_INPUT_EXTENSIONS
-    assert {"pdf", "docx", "csv", "xlsm", "epub", "png"} <= SUPPORTED_INPUT_EXTENSIONS

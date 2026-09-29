@@ -15,6 +15,16 @@ from typing import TextIO
 from tqdm import tqdm
 
 
+def format_cost(cents: float) -> str:
+    dollars = cents / 100
+    return f"${dollars:.2f}" if dollars >= 0.01 or dollars == 0 else f"${dollars:.4f}"
+
+
+def format_elapsed(seconds: float) -> str:
+    minutes, secs = divmod(round(seconds), 60)
+    return f"{minutes}m{secs:02d}s" if minutes else f"{seconds:.1f}s"
+
+
 def setup_logging(verbose: bool) -> None:
     handler = logging.StreamHandler(sys.stderr)
     if verbose:

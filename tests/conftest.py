@@ -8,9 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from docs_to_md.assemble import ChunkOutput
+from docs_to_md.backends import Backend, BackendInfo
+from docs_to_md.backends.datalab.models import ConvertResult
 from docs_to_md.console import Console
 from docs_to_md.errors import Cancelled
-from docs_to_md.models import ConvertResult
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 PNG_BYTES = b"\x89PNG\r\n\x1a\nfake"
@@ -43,6 +45,52 @@ class CapturingConsole(Console):
 @pytest.fixture
 def console() -> CapturingConsole:
     return CapturingConsole()
+
+
+class FakeBackend(Backend):
+    """A synchronous in-memory backend for testing the pipeline on its own.
+
+    ``handler(chunk, check_cancelled)`` returns the chunk's ``ChunkOutput`` or
+    raises. The default returns one image and ``<chunk file name>`` as content.
+    """
+
+    info = BackendInfo(
+        name="fake",
+        label="Fake",
+        input_extensions=frozenset({"pdf", "docx", "pptx"}),
+        output_formats=frozenset({"markdown", "html", "json"}),
+    )
+
+    def __init__(self, output_format: str = "markdown", handler=None):
+        self.output_format = output_format
+        self.handler = handler or self.default_handler
+        self.chunks: list = []
+        self._lock = threading.Lock()
+
+    @classmethod
+    def from_config(cls, config, stop_event):
+        return cls(config.output_format)
+
+    def default_handler(self, chunk, check_cancelled):
+        name = chunk.path.name
+        content = {
+            "markdown": f"# {name}\n\n![fig](img.png)\n",
+            "html": f'<html><body><p>{name}</p><img src="img.png"/></body></html>',
+            "json": {"children": [{"id": "/page/0/Page/0"}], "metadata": {}},
+        }[self.output_format]
+        return ChunkOutput(
+            pages=chunk.pages,
+            content=content,
+            images={"img.png": PNG_B64},
+            page_count=len(chunk.pages) or 1,
+            cost_cents=0.3,
+        )
+
+    def convert(self, chunk, check_cancelled):
+        check_cancelled()
+        with self._lock:
+            self.chunks.append(chunk)
+        return self.handler(chunk, check_cancelled)
 
 
 class FakeClient:

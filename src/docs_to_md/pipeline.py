@@ -1,7 +1,12 @@
-"""Run conversions: split, submit concurrently, poll, assemble, write."""
+"""Run conversions: plan, split, convert chunks concurrently, assemble, write.
+
+Everything here is backend-agnostic. How a chunk is actually converted is up to
+the ``Backend`` (see ``backends/base.py``).
+"""
 
 from __future__ import annotations
 
+import functools
 import logging
 import tempfile
 import threading
@@ -12,26 +17,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from docs_to_md.assemble import ChunkOutput, assemble, write_document
-from docs_to_md.client import DatalabClient
+from docs_to_md.backends.base import Backend
 from docs_to_md.config import Config
-from docs_to_md.console import Console
+from docs_to_md.console import Console, format_cost
 from docs_to_md.discovery import Job, display_path
-from docs_to_md.errors import (
-    APIError,
-    Cancelled,
-    DocsToMdError,
-    FatalAPIError,
-    FileError,
-    RetryableAPIError,
-)
-from docs_to_md.pdf import PdfChunk, count_pages, select_pages, split_pdf
+from docs_to_md.errors import Cancelled, DocsToMdError, FatalAPIError, FileError
+from docs_to_md.pdf import Chunk, count_pages, select_pages, split_pdf
 
 logger = logging.getLogger(__name__)
-
-MAX_UPLOAD_BYTES = 200 * 1024 * 1024
-INITIAL_POLL_SECONDS = 2.0
-MAX_POLL_SECONDS = 15.0
-MAX_RATE_LIMIT_RESUBMITS = 3
 
 CONVERTED, SKIPPED, FAILED = "converted", "skipped", "failed"
 
@@ -66,14 +59,9 @@ class RunSummary:
         return 1 if self.count(FAILED) else 0
 
 
-def format_cost(cents: float) -> str:
-    dollars = cents / 100
-    return f"${dollars:.2f}" if dollars >= 0.01 or dollars == 0 else f"${dollars:.4f}"
-
-
-def format_elapsed(seconds: float) -> str:
-    minutes, secs = divmod(round(seconds), 60)
-    return f"{minutes}m{secs:02d}s" if minutes else f"{seconds:.1f}s"
+def _format_size(size: int) -> str:
+    mib = size / (1024 * 1024)
+    return f"{mib:g} MB" if mib >= 1 else f"{size} bytes"
 
 
 class Pipeline:
@@ -81,13 +69,13 @@ class Pipeline:
         self,
         config: Config,
         console: Console,
-        client: DatalabClient | None = None,
+        backend: Backend | None = None,
         stop_event: threading.Event | None = None,
     ):
         self.config = config
         self.console = console
         self.stop_event = stop_event or threading.Event()
-        self.client = client
+        self.backend = backend  # not needed for dry runs
         self._fatal_error: FatalAPIError | None = None
 
     # -- planning ---------------------------------------------------------
@@ -127,28 +115,10 @@ class Pipeline:
         if abort.is_set():
             raise Cancelled("Another chunk of this file failed")
 
-    def _wait_for_result(self, request_id: str, deadline: float, abort: threading.Event):
-        assert self.client is not None
-        delay = INITIAL_POLL_SECONDS
-        while True:
-            self._check_cancelled(abort)
-            try:
-                result = self.client.get_result(request_id)
-                if result.status != "processing":
-                    return result
-            except RetryableAPIError as e:
-                logger.debug("Polling %s: %s", request_id, e)
-            if time.monotonic() + delay > deadline:
-                raise APIError(
-                    f"timed out after {format_elapsed(self.config.timeout)} waiting for "
-                    f"request {request_id} (raise --timeout for very large jobs)"
-                )
-            self.client.sleep(delay)
-            delay = min(delay * 1.5, MAX_POLL_SECONDS)
-
-    def _convert_chunk(self, job: Job, chunk: PdfChunk, abort: threading.Event) -> ChunkOutput:
+    def _convert_chunk(self, chunk: Chunk, abort: threading.Event) -> ChunkOutput:
+        assert self.backend is not None
         try:
-            return self._convert_chunk_once(job, chunk, abort)
+            output = self.backend.convert(chunk, functools.partial(self._check_cancelled, abort))
         except Cancelled:
             raise
         except FatalAPIError as e:
@@ -159,39 +129,12 @@ class Pipeline:
         except BaseException:
             abort.set()  # don't keep spending credits on this file's other chunks
             raise
-
-    def _convert_chunk_once(self, job: Job, chunk: PdfChunk, abort: threading.Event) -> ChunkOutput:
-        assert self.client is not None
-        options = self.config.convert_options(local_page_selection=job.is_pdf)
-        deadline = time.monotonic() + self.config.timeout
-        for attempt in range(MAX_RATE_LIMIT_RESUBMITS + 1):
-            self._check_cancelled(abort)
-            request_id = self.client.submit(chunk.path, options)
-            result = self._wait_for_result(request_id, deadline, abort)
-            if result.status == "complete" and result.success is not False:
-                content = result.content_for(self.config.output_format)
-                if content is None:
-                    raise APIError(f"the API returned no {self.config.output_format} output")
-                self.console.advance()
-                return ChunkOutput(
-                    pages=chunk.pages,
-                    content=content,
-                    images=result.images,
-                    page_count=result.page_count or len(chunk.pages),
-                    cost_cents=result.cost_cents or 0.0,
-                )
-            error = result.error or f"conversion {result.status}"
-            # Page throughput limits surface as failed results, not HTTP 429.
-            if "rate limit" in error.lower() and attempt < MAX_RATE_LIMIT_RESUBMITS:
-                logger.debug("Request %s hit a rate limit; resubmitting", request_id)
-                self.client.sleep(30.0 * (attempt + 1))
-                continue
-            raise APIError(error)
-        raise AssertionError("unreachable")
+        self.console.advance()
+        return output
 
     # -- per-file orchestration (main thread) -----------------------------
 
-    def _prepare(self, job: Job, work_dir: Path) -> list[PdfChunk]:
+    def _prepare(self, job: Job, work_dir: Path) -> list[Chunk]:
         if job.is_pdf:
             work_dir.mkdir(parents=True, exist_ok=True)
             return split_pdf(
@@ -201,9 +144,12 @@ class Pipeline:
                 self.config.page_range,
                 self.config.max_pages,
             )
-        if job.source.stat().st_size > MAX_UPLOAD_BYTES:
-            raise FileError("file is larger than the API's 200 MB upload limit")
-        return [PdfChunk(path=job.source, pages=())]
+        assert self.backend is not None
+        info = self.backend.info
+        limit = info.max_upload_bytes
+        if limit is not None and job.source.stat().st_size > limit:
+            raise FileError(f"file is larger than {info.label}'s {_format_size(limit)} upload limit")
+        return [Chunk(path=job.source)]
 
     def _finish(self, job: Job, futures: list[Future], abort: threading.Event) -> FileResult:
         try:
@@ -260,8 +206,8 @@ class Pipeline:
         return summary
 
     def _convert_all(self, jobs: Sequence[Job], summary: RunSummary) -> None:
-        if self.client is None:
-            raise FatalAPIError("No API client configured")
+        if self.backend is None:
+            raise FatalAPIError("No conversion backend configured")
         pool = ThreadPoolExecutor(max_workers=self.config.concurrency, thread_name_prefix="convert")
         try:
             with tempfile.TemporaryDirectory(prefix="pdf-to-md-") as tmp:
@@ -275,7 +221,7 @@ class Pipeline:
                         summary.results.append(FileResult(job, FAILED, str(e)))
                         continue
                     abort = threading.Event()
-                    futures = [pool.submit(self._convert_chunk, job, c, abort) for c in chunks]
+                    futures = [pool.submit(self._convert_chunk, c, abort) for c in chunks]
                     scheduled.append((job, futures, abort))
                     total_chunks += len(chunks)
 

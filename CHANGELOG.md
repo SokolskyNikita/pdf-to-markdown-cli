@@ -8,6 +8,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-29
+
+### Added
+
+- `--backend` option for choosing the conversion service. `datalab` is the default and, for now, the only choice.
+
+### Changed
+
+- Conversion now goes through a pluggable backend interface (`docs_to_md.backends`), so other services or local engines can be added without touching the pipeline. Datalab behavior is unchanged. The Datalab client and API types moved from `docs_to_md.client` and `docs_to_md.models` to `docs_to_md.backends.datalab`.
+
 ## [1.1.0] - 2026-09-29
 
 ### Added

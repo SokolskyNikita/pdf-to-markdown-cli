@@ -1,4 +1,4 @@
-"""Combine per-chunk API results into one output document plus images."""
+"""Combine per-chunk backend results into one output document plus images."""
 
 from __future__ import annotations
 
@@ -20,6 +20,13 @@ from docs_to_md.markdown import normalize_line_breaks, remove_duplicate_captions
 
 logger = logging.getLogger(__name__)
 
+# Output format -> file extension
+OUTPUT_EXTENSIONS: dict[str, str] = {
+    "markdown": ".md",
+    "html": ".html",
+    "json": ".json",
+}
+
 _MD_PAGE_MARKER = re.compile(r"^\{(\d+)\}(-{48})$", re.MULTILINE)
 _HTML_PAGE_ID = re.compile(r'(data-page-id=")(\d+)(")')
 _BLOCK_ID = re.compile(r"(^|['\"])/page/(\d+)/")  # block ids and <content-ref src='/page/N/...'>
@@ -30,7 +37,13 @@ _HTML_HEAD = re.compile(r"<head[^>]*>.*?</head>", re.DOTALL | re.IGNORECASE)
 
 @dataclass
 class ChunkOutput:
-    """The result of converting one chunk."""
+    """The result of converting one chunk.
+
+    ``content`` follows Marker's output conventions, with page numbers local to
+    the chunk (0 is its first page): Markdown ``{N}`` + 48 dashes separators and
+    ``page-N-M`` anchors, HTML ``data-page-id``, and JSON ``/page/N/`` block ids
+    and ``page`` fields. Images are referenced by their key in ``images``.
+    """
 
     pages: Sequence[int]  # source page numbers covered by this chunk, in order
     content: Any  # str for markdown/html, dict for json

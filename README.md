@@ -175,6 +175,7 @@ pdf-to-md INPUT [INPUT ...] [options]
 
 | Option | Description |
 | --- | --- |
+| `--backend NAME` | Conversion service. Default and currently only choice: `datalab`. |
 | `-m`, `--mode MODE` | `fast` (the API default), `balanced`, or `accurate`. |
 | `--paginate` | Insert page separators. |
 | `--no-images` | Don't extract images. |

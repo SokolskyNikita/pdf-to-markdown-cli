@@ -11,18 +11,18 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from docs_to_md import __version__
-from docs_to_md.client import DatalabClient
+from docs_to_md.assemble import OUTPUT_EXTENSIONS
+from docs_to_md.backends import BACKENDS, DEFAULT_BACKEND, get_backend
 from docs_to_md.config import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENCY,
     DEFAULT_TIMEOUT_SECONDS,
     Config,
 )
-from docs_to_md.console import Console, setup_logging
+from docs_to_md.console import Console, format_cost, format_elapsed, setup_logging
 from docs_to_md.discovery import plan_jobs
 from docs_to_md.errors import Cancelled, ConfigurationError, FatalAPIError
-from docs_to_md.models import MODES
-from docs_to_md.pipeline import CONVERTED, FAILED, SKIPPED, Pipeline, format_cost, format_elapsed
+from docs_to_md.pipeline import CONVERTED, FAILED, SKIPPED, Pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +30,6 @@ EXIT_OK = 0
 EXIT_FAILURES = 1
 EXIT_USAGE = 2
 EXIT_INTERRUPTED = 130
-
-API_KEY_ENV_VARS = ("DATALAB_API_KEY", "MARKER_PDF_KEY")
 
 EPILOG = """\
 examples:
@@ -84,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-f",
         "--format",
         dest="output_format",
-        choices=("markdown", "html", "json"),
+        choices=tuple(OUTPUT_EXTENSIONS),
         default="markdown",
         help="output format (default: markdown)",
     )
@@ -113,10 +111,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     conv = parser.add_argument_group("conversion")
     conv.add_argument(
+        "--backend",
+        choices=tuple(BACKENDS),
+        default=DEFAULT_BACKEND,
+        help=f"conversion service (default: {DEFAULT_BACKEND})",
+    )
+    conv.add_argument(
         "-m",
         "--mode",
-        choices=MODES,
-        help="quality/speed trade-off; the API defaults to fast",
+        choices=tuple(dict.fromkeys(mode for backend in BACKENDS.values() for mode in backend.info.modes)),
+        help="quality/speed trade-off; Datalab defaults to fast",
     )
     conv.add_argument("--paginate", action="store_true", help="insert page separators in the output")
     conv.add_argument(
@@ -189,10 +193,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_api_key(explicit: str | None) -> str | None:
+def resolve_api_key(explicit: str | None, env_vars: Sequence[str]) -> str | None:
+    """``--api-key`` if given, else the first non-empty variable in ``env_vars``."""
     if explicit:
         return explicit.strip()
-    for name in API_KEY_ENV_VARS:
+    for name in env_vars:
         value = os.environ.get(name, "").strip()
         if value:
             return value
@@ -211,9 +216,11 @@ def config_from_args(args: argparse.Namespace, console: Console) -> Config:
         if used:
             console.warning(f"{flag} is no longer supported by the Datalab API and is ignored")
 
+    backend = get_backend(args.backend)
     return Config(
         inputs=list(args.inputs),
-        api_key=resolve_api_key(args.api_key),
+        backend=backend.info.name,
+        api_key=resolve_api_key(args.api_key, backend.info.api_key_env_vars),
         output_dir=args.output_dir,
         output_format=args.output_format,
         mode=mode,
@@ -265,12 +272,18 @@ def main(argv: Sequence[str] | None = None, console: Console | None = None) -> i
     stop_event = threading.Event()
     try:
         config = config_from_args(args, console)
-        jobs = plan_jobs(config.inputs, config.output_format, config.output_dir)
+        backend_type = get_backend(config.backend)
+        jobs = plan_jobs(
+            config.inputs,
+            config.output_format,
+            config.output_dir,
+            input_extensions=backend_type.info.input_extensions,
+        )
         if not jobs:
             console.error("No supported files to convert.")
             return EXIT_FAILURES
-        client = None if config.dry_run else DatalabClient(config.api_key or "", stop_event=stop_event)
-        pipeline = Pipeline(config, console, client=client, stop_event=stop_event)
+        backend = None if config.dry_run else backend_type.from_config(config, stop_event)
+        pipeline = Pipeline(config, console, backend=backend, stop_event=stop_event)
         summary = pipeline.run(jobs)
     except ConfigurationError as e:
         console.error(str(e))

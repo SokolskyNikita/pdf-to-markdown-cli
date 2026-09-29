@@ -14,7 +14,7 @@ from docs_to_md.discovery import plan_jobs
 from docs_to_md.pdf import count_pages, split_pdf
 from docs_to_md.pipeline import Pipeline
 
-from .conftest import FakeClient
+from .conftest import FakeBackend
 from .samples import EXAMPLES, SAMPLES
 
 IDS = [s.filename for s in SAMPLES]
@@ -55,11 +55,12 @@ def test_every_sample_converts_through_the_pipeline(tmp_path, console):
     source.mkdir()
     for sample in SAMPLES:
         shutil.copy(sample.path, source / sample.filename)
-    client = FakeClient()
+    backend = FakeBackend()
     config = Config(inputs=[source], api_key="k", chunk_size=1).validate()
-    summary = Pipeline(config, console, client=client).run(plan_jobs(config.inputs, "markdown"))
+    jobs = plan_jobs(config.inputs, "markdown", input_extensions={"pdf"})
+    summary = Pipeline(config, console, backend=backend).run(jobs)
     assert summary.exit_code == 0
-    assert len(client.submissions) == sum(s.pages for s in SAMPLES)
+    assert len(backend.chunks) == sum(s.pages for s in SAMPLES)
     assert sorted(p.name for p in Path(source).glob("*.md")) == sorted(
         s.filename.replace(".pdf", ".md") for s in SAMPLES
     )

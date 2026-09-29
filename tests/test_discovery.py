@@ -2,8 +2,15 @@ from pathlib import Path
 
 import pytest
 
-from docs_to_md.discovery import plan_jobs
+from docs_to_md.backends.datalab import DatalabBackend
+from docs_to_md.discovery import plan_jobs as _plan_jobs
 from docs_to_md.errors import ConfigurationError
+
+
+def plan_jobs(inputs, output_format, output_dir=None):
+    return _plan_jobs(
+        inputs, output_format, output_dir, input_extensions=DatalabBackend.info.input_extensions
+    )
 
 
 def touch(path: Path, content: str = "x") -> Path:
@@ -157,3 +164,12 @@ def test_unsupported_explicit_file(tmp_path):
 
 def test_empty_directory_yields_no_jobs(tmp_path):
     assert plan_jobs([tmp_path], "markdown") == []
+
+
+def test_input_extensions_come_from_the_backend(tmp_path):
+    touch(tmp_path / "a.pdf")
+    touch(tmp_path / "b.docx")
+    jobs = _plan_jobs([tmp_path], "markdown", input_extensions={"pdf"})
+    assert [j.source.name for j in jobs] == ["a.pdf"]
+    with pytest.raises(ConfigurationError, match=r"Unsupported file type: .*b\.docx \(supported: pdf\)"):
+        _plan_jobs([tmp_path / "b.docx"], "markdown", input_extensions={"pdf"})
