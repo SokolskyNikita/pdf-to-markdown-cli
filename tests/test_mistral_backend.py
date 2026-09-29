@@ -161,9 +161,11 @@ def test_whole_documents_get_page_selection(tmp_path, console):
     summary, client = run([tmp_path], console, page_range="1,3-4", max_pages=2, paginate=True)
     assert summary.exit_code == 0
     assert all(body["pages"] == [1, 3] for body in client.bodies)
-    assert client.bodies[0]["document"]["document_url"].startswith(
-        "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
-    )
+    urls = sorted(body["document"]["document_url"].split(";")[0] for body in client.bodies)
+    assert urls == [
+        "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]
     # Page markers keep the API's page numbers.
     assert MARKER.findall((tmp_path / "notes.md").read_text()) == ["1", "3"]
 
