@@ -186,3 +186,9 @@ def test_write_document_replaces_previous_output_and_images(tmp_path):
     assert out.read_text() == "new"
     assert [p.name for p in images.iterdir()] == ["new.png"]
     assert sorted(p.name for p in out.parent.iterdir()) == ["a.md", "a_images"]
+
+
+def test_write_document_uses_unix_newlines(tmp_path):
+    out = tmp_path / "a.md"
+    write_document(Document(text="one\ntwo\n", images={}), out, tmp_path / "a_images")
+    assert out.read_bytes() == b"one\ntwo\n"

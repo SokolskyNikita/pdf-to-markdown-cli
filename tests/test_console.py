@@ -79,7 +79,7 @@ def test_progress_counts_work_finished_before_the_bar_starts():
 
 def test_status_symbols_survive_legacy_encodings():
     raw = io.BytesIO()
-    stderr = io.TextIOWrapper(raw, encoding="cp1252")
+    stderr = io.TextIOWrapper(raw, encoding="cp1252", newline="\n")
     Console(stderr=stderr).success("done → there")
     stderr.flush()
     assert raw.getvalue() == b"? done ? there\n"

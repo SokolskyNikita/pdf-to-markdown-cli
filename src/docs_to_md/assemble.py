@@ -198,7 +198,7 @@ def write_document(doc: Document, output: Path, images_dir: Path) -> None:
             staging.mkdir(parents=True)
             for name, data in doc.images.items():
                 (staging / name).write_bytes(data)
-        partial.write_text(doc.text, encoding="utf-8")
+        partial.write_text(doc.text, encoding="utf-8", newline="\n")  # same bytes on every OS
 
         if images_dir.exists():
             shutil.rmtree(images_dir)
