@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdf-to-markdown-cli"
-version = "0.5.2"
-description = "CLI utility to convert PDFs and supported document formats to Markdown/JSON/HTML with Marker API."
+version = "1.0.0"
+description = "Convert PDFs, Office documents, ebooks, and images to Markdown, HTML, or JSON with the Datalab API."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
     { name = "Nikita Sokolsky", email = "sokolx@gmail.com" },
@@ -17,7 +17,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",
     "Programming Language :: Python :: 3",
@@ -25,6 +25,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Environment :: Console",
     "Topic :: Office/Business",
@@ -32,16 +33,11 @@ classifiers = [
     "Topic :: Text Processing",
     "Topic :: Utilities",
 ]
-keywords = ["pdf", "markdown", "converter", "cli", "document", "marker", "md"]
+keywords = ["pdf", "markdown", "converter", "cli", "document", "ocr", "datalab", "marker"]
 dependencies = [
-    "backoff>=2.0",
-    "diskcache>=5.0",
-    "filetype>=1.0",
     "pikepdf>=8.0",
-    "pydantic>=2.0",
-    "ratelimit>=2.0",
-    "requests>=2.0",
-    "tqdm>=4.0",
+    "requests>=2.28",
+    "tqdm>=4.60",
 ]
 
 [project.urls]
@@ -49,10 +45,10 @@ dependencies = [
 "Repository" = "https://github.com/SokolskyNikita/pdf-to-markdown-cli"
 "Documentation" = "https://github.com/SokolskyNikita/pdf-to-markdown-cli#readme"
 "Issues" = "https://github.com/SokolskyNikita/pdf-to-markdown-cli/issues"
-"Changelog" = "https://github.com/SokolskyNikita/pdf-to-markdown-cli/releases"
+"Changelog" = "https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/CHANGELOG.md"
 
 [project.scripts]
-pdf-to-md = "docs_to_md.main:main"
+pdf-to-md = "docs_to_md.cli:entrypoint"
 
 [project.optional-dependencies]
 test = [
@@ -60,10 +56,10 @@ test = [
     "pytest-cov>=5.0.0",
 ]
 dev = [
+    "pdf-to-markdown-cli[test]",
     "build>=1.2.0",
     "twine>=5.1.0",
     "ruff>=0.11.0",
-    "types-requests>=2.32.0",
 ]
 
 [tool.setuptools]
@@ -72,3 +68,25 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["docs_to_md"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if __name__ == .__main__.:", "raise AssertionError"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001"]

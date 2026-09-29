@@ -1,79 +1,77 @@
 # Contributing
 
-Thanks for helping improve `pdf-to-markdown-cli`. This project is a Python CLI around the Datalab Marker API, so the most valuable contributions are changes that keep conversion behavior reliable, predictable, and easy to understand.
+Thanks for helping improve `pdf-to-markdown-cli`. The most valuable contributions keep conversions reliable and predictable, and keep the CLI pleasant to script.
 
 ## Development setup
 
-- Fork and clone the repository.
-- Create and activate a virtual environment.
-- Install the package in editable mode:
-
 ```bash
-pip install -e .
+git clone https://github.com/SokolskyNikita/pdf-to-markdown-cli.git
+cd pdf-to-markdown-cli
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-- Run the test suite:
+Run the checks CI runs:
 
 ```bash
-python -m unittest discover -s tests -v
+pytest --cov
+ruff check .
+ruff format --check .
 ```
 
-For local CLI testing, set a Datalab API key:
+For manual testing against the live API, set a key and use the bundled samples. They are small, so they cost fractions of a cent:
 
 ```bash
-export MARKER_PDF_KEY="your_api_key"
-pdf-to-md ./examples/equations.pdf
+export DATALAB_API_KEY="your_api_key"
+pdf-to-md examples/alice_in_wonderland_sample.pdf -o /tmp/out --chunk-size 1 --paginate
 ```
 
-## Project conventions
+## Project layout
 
-- Target Python 3.10+.
-- Keep changes focused and explain the user-facing reason for the change.
-- Prefer small functions, explicit state transitions, and contextual error messages.
-- Keep CLI behavior backward-compatible unless the breaking change is intentional and documented.
-- Use the existing exception hierarchy in `src/docs_to_md/utils/exceptions.py`.
-- Use structured models and helpers that already exist before adding new abstractions.
-- Do not commit API keys, credentials, private documents, or generated local cache/tmp data.
-
-## Testing expectations
-
-Run all tests before submitting:
-
-```bash
-python -m unittest discover -s tests -v
+```text
+src/docs_to_md/
+  cli.py         argument parsing, entry point, exit codes, run summary
+  config.py      validated runtime configuration
+  discovery.py   input discovery and deterministic output planning
+  pipeline.py    splitting, concurrent submission, polling, per-file results
+  client.py      Datalab Convert API client (retries, timeouts, error types)
+  models.py      API request/response types and supported formats
+  pdf.py         page-range parsing and PDF splitting (pikepdf)
+  assemble.py    merging chunk outputs, image renaming, atomic writes
+  markdown.py    Markdown line-break normalization
+  console.py     terminal output, progress bar, logging setup
+  errors.py      exception hierarchy
+tests/           pytest suite; no test calls the live API
 ```
 
-Add or update tests when you change:
+## Conventions
 
-- CLI parsing or config validation.
-- Supported formats, MIME detection, or output extensions.
-- Output path naming or image directory behavior.
-- Cache/request state transitions.
-- PDF chunking, polling, result assembly, or cleanup behavior.
+- Target Python 3.10+. Use type hints and `from __future__ import annotations`.
+- Keep the stdout/stderr split: only converted file paths go to stdout.
+- Raise exceptions from `errors.py`. Raise `FatalAPIError` only for problems that affect every request, such as a bad key or no credits.
+- Keep CLI behavior backward-compatible unless a breaking change is intentional and documented in `CHANGELOG.md`.
+- Never commit API keys, private documents, or build artifacts.
 
-The test suite does not call the live Datalab API. Use mocks for API behavior unless an explicit integration test setup is added.
+## Tests
 
-## Documentation expectations
+Add or update tests whenever you change CLI options, output naming, discovery rules, API request/response handling, chunk merging, or error handling. Use `tests/conftest.py`'s `FakeClient` for pipeline tests, and a fake session (see `tests/test_client.py`) for HTTP behavior.
 
-Update docs whenever user-facing behavior changes:
+## Documentation
 
-- `README.md` for installation, usage, options, supported formats, output behavior, and troubleshooting.
-- `CHANGELOG.md` for release-visible changes.
-- `AGENTS.md` for implementation maps and agent-facing project guidance.
-- `CONTRIBUTING.md` for contributor workflow changes.
+Update `README.md` for user-facing changes, `CHANGELOG.md` for anything release-visible, and `AGENTS.md` when the module map or conventions change.
 
-Treat `examples/*.md` as generated sample conversion outputs. Do not rewrite them as hand-authored docs unless the task is specifically to refresh examples.
+`examples/` holds the sample PDFs used by the tests, next to their outputs from the current version. If output behavior changes, regenerate the outputs with `pdf-to-md examples --overwrite`. The Datalab API reference lives at <https://documentation.datalab.to/api-reference/>.
 
-`datalab_marker_api_docs.md` is copied Datalab API documentation for convenience. Avoid editing it as part of normal project documentation work.
+## Releasing
 
-## Pull request checklist
+1. Bump `version` in `pyproject.toml` and move the `Unreleased` changelog notes under a `## [X.Y.Z] - YYYY-MM-DD` heading.
+2. Commit, push `main`, and wait for CI to pass.
+3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-- The change has a clear motivation.
-- Tests were added or updated when behavior changed.
-- `python -m unittest discover -s tests -v` passes locally.
-- User-facing docs were updated if needed.
-- No credentials, private files, local caches, or build artifacts were committed.
+The [release workflow](.github/workflows/release.yml) checks that the tag matches the package version, runs the tests, builds the sdist and wheel, and creates the GitHub release with those files attached and the changelog section as notes. It then publishes to PyPI through [Trusted Publishing](https://docs.pypi.org/trusted-publishers/).
+
+PyPI publishing needs a one-time setup. On pypi.org, go to the project's **Settings → Publishing** and add a GitHub publisher (`SokolskyNikita/pdf-to-markdown-cli`, workflow `release.yml`, environment `pypi`). Then set the repository variable `PYPI_PUBLISH=true`. Until then, upload manually with `twine upload dist/*`, using the files attached to the GitHub release.
 
 ## Reporting issues
 
-Use GitHub issues for bug reports and feature requests. Include the command you ran, the file type you were converting, the expected result, and the error output or observed behavior.
+Open a GitHub issue with the command you ran, the input file type, what you expected, and the output of the same command with `-v`.

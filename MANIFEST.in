@@ -1,13 +1,7 @@
-# Include the README and LICENSE
-include README.md
-include LICENSE
-include CHANGELOG.md
-include CONTRIBUTING.md
+include README.md LICENSE CHANGELOG.md CONTRIBUTING.md
 
-# Include package source
-recursive-include src/docs_to_md *.py
+# The test suite, with the sample PDFs it uses, so the sdist is testable.
+recursive-include tests *.py
+include examples/alice_in_wonderland_sample.pdf examples/equations.pdf
 
-# Exclude generated files
-global-exclude *.py[cod]
-global-exclude __pycache__
-global-exclude .DS_Store
+global-exclude *.py[cod] __pycache__ .DS_Store

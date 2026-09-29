@@ -1,5 +1,3 @@
-import sys
-from .main import main
+from docs_to_md.cli import entrypoint
 
-if __name__ == "__main__":
-    sys.exit(main()) 
+entrypoint()

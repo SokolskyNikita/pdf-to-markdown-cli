@@ -36,3 +36,6 @@ htmlcov/
 # Temporary/Output files (keep existing)
 chunks/
 *.out
+# Tooling
+.ruff_cache/
+.mypy_cache/

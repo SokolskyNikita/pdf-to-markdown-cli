@@ -1,52 +1,261 @@
-import os
-import sys
-import tempfile
-import unittest
-from pathlib import Path
-from unittest import mock
+from __future__ import annotations
 
-from docs_to_md.config.cli import create_config_from_args
+import pytest
 
+import docs_to_md.cli as cli
+from docs_to_md import __version__
+from docs_to_md.config import Config
+from docs_to_md.errors import ConfigurationError, FatalAPIError
 
-class TestCLI(unittest.TestCase):
-    def test_create_config_from_args(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            input_file = Path(tmp_dir) / "input.txt"
-            input_file.write_text("data")
-            env = {"MARKER_PDF_KEY": "abc"}
-            argv = [
-                "prog",
-                str(input_file),
-                "-cs",
-                "5",
-                "--max",
-                "-o",
-                tmp_dir,
-            ]
-            with mock.patch.dict(os.environ, env, clear=False):
-                with mock.patch.object(sys, "argv", argv):
-                    config = create_config_from_args()
-            self.assertEqual(Path(config.input_path), input_file.resolve())
-            self.assertEqual(config.chunk_size, 5)
-            self.assertTrue(config.use_llm)
-            self.assertTrue(config.force_ocr)
-            self.assertEqual(config.output_dir, Path(tmp_dir).resolve())
-
-    def test_create_config_html_output(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            input_file = Path(tmp_dir) / "input.txt"
-            input_file.write_text("data")
-            env = {"MARKER_PDF_KEY": "abc"}
-            argv = [
-                "prog",
-                str(input_file),
-                "--html",
-            ]
-            with mock.patch.dict(os.environ, env, clear=False):
-                with mock.patch.object(sys, "argv", argv):
-                    config = create_config_from_args()
-            self.assertEqual(config.output_format, "html")
+from .conftest import CapturingConsole, FakeClient
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.fixture(autouse=True)
+def no_ambient_key(monkeypatch):
+    for name in cli.API_KEY_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def fake_client(monkeypatch):
+    client = FakeClient()
+    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: client)
+    return client
+
+
+def parse(*argv):
+    console = CapturingConsole()
+    args = cli.build_parser().parse_args(list(argv))
+    return cli.config_from_args(args, console), console
+
+
+def test_defaults(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATALAB_API_KEY", "env-key")
+    config, console = parse(str(tmp_path))
+    assert config.api_key == "env-key"
+    assert config.output_format == "markdown"
+    assert config.chunk_size == 25
+    assert config.mode is None
+    assert config.reflow_markdown is True
+    assert console.err == ""
+
+
+def test_api_key_precedence(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARKER_PDF_KEY", "legacy")
+    assert parse(str(tmp_path))[0].api_key == "legacy"
+    monkeypatch.setenv("DATALAB_API_KEY", "new")
+    assert parse(str(tmp_path))[0].api_key == "new"
+    assert parse(str(tmp_path), "--api-key", "flag")[0].api_key == "flag"
+
+
+def test_missing_api_key_is_a_usage_error(tmp_path):
+    with pytest.raises(ConfigurationError, match="DATALAB_API_KEY"):
+        parse(str(tmp_path))
+
+
+def test_dry_run_does_not_need_a_key(tmp_path):
+    config, _ = parse(str(tmp_path), "-n")
+    assert config.dry_run and config.api_key is None
+
+
+def test_format_options(tmp_path):
+    assert parse(str(tmp_path), "-n", "--html")[0].output_format == "html"
+    assert parse(str(tmp_path), "-n", "--json")[0].output_format == "json"
+    assert parse(str(tmp_path), "-n", "-f", "html")[0].output_format == "html"
+    with pytest.raises(SystemExit):
+        parse(str(tmp_path), "--html", "--json")
+
+
+def test_all_options(tmp_path):
+    config, _ = parse(
+        str(tmp_path),
+        "-n",
+        "-o",
+        "out",
+        "--overwrite",
+        "--keep-line-breaks",
+        "-m",
+        "balanced",
+        "--paginate",
+        "--no-images",
+        "--no-image-captions",
+        "--skip-cache",
+        "--api-option",
+        "extras=extract_links",
+        "--page-range",
+        "0, 2-3",
+        "--max-pages",
+        "4",
+        "--chunk-size",
+        "10",
+        "-j",
+        "8",
+        "--timeout",
+        "60",
+    )
+    assert config.output_dir.is_absolute() and config.output_dir.name == "out"
+    assert config.overwrite and not config.reflow_markdown
+    assert config.mode == "balanced"
+    assert config.paginate and config.disable_image_extraction and config.disable_image_captions
+    assert config.skip_cache
+    assert config.extra_options == {"extras": "extract_links"}
+    assert config.page_range == "0,2-3"
+    assert (config.max_pages, config.chunk_size, config.concurrency, config.timeout) == (4, 10, 8, 60)
+
+
+def test_no_chunk(tmp_path):
+    assert parse(str(tmp_path), "-n", "--no-chunk")[0].chunk_size is None
+
+
+def test_bad_api_option_is_rejected(tmp_path):
+    with pytest.raises(SystemExit):
+        parse(str(tmp_path), "--api-option", "novalue")
+
+
+@pytest.mark.parametrize(("flag", "mode"), [("--llm", "balanced"), ("--max", "accurate")])
+def test_deprecated_quality_flags_map_to_mode(tmp_path, flag, mode):
+    config, console = parse(str(tmp_path), "-n", flag)
+    assert config.mode == mode
+    assert f"{flag} is deprecated; use --mode {mode}" in console.err
+
+
+def test_explicit_mode_wins_over_deprecated_flag(tmp_path):
+    assert parse(str(tmp_path), "-n", "--max", "-m", "fast")[0].mode == "fast"
+
+
+@pytest.mark.parametrize("argv", [["--strip"], ["--force"], ["-l", "French"]])
+def test_removed_api_flags_warn(tmp_path, argv):
+    _, console = parse(str(tmp_path), "-n", *argv)
+    assert "no longer supported" in console.err
+
+
+def test_legacy_short_flags_still_work(tmp_path):
+    config, _ = parse(str(tmp_path), "-n", "-cs", "5", "-mp", "2", "--pages", "--noimg")
+    assert (config.chunk_size, config.max_pages) == (5, 2)
+    assert config.paginate and config.disable_image_extraction
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--chunk-size", "0"], "chunk-size"),
+        (["--max-pages", "0"], "max-pages"),
+        (["-j", "0"], "concurrency"),
+        (["--timeout", "0"], "timeout"),
+        (["--page-range", "5-1"], "reversed"),
+    ],
+)
+def test_invalid_values(tmp_path, argv, message):
+    with pytest.raises(ConfigurationError, match=message):
+        parse(str(tmp_path), "-n", *argv)
+
+
+def test_output_dir_must_be_a_directory(tmp_path):
+    file = tmp_path / "file"
+    file.write_text("x")
+    with pytest.raises(ConfigurationError, match="not a directory"):
+        parse(str(tmp_path), "-n", "-o", str(file))
+
+
+def test_config_rejects_unknown_values(tmp_path):
+    with pytest.raises(ConfigurationError):
+        Config(inputs=[tmp_path], api_key="k", output_format="docx").validate()
+    with pytest.raises(ConfigurationError):
+        Config(inputs=[tmp_path], api_key="k", mode="turbo").validate()
+    with pytest.raises(ConfigurationError):
+        Config(inputs=[], api_key="k").validate()
+
+
+def test_version(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"pdf-to-md {__version__}"
+
+
+def test_main_converts_and_prints_paths(examples, fake_client, monkeypatch):
+    monkeypatch.setenv("DATALAB_API_KEY", "k")
+    console = CapturingConsole()
+    assert cli.main([str(examples)], console=console) == cli.EXIT_OK
+    assert console.out.splitlines() == [
+        str(examples / "alice_in_wonderland_sample.md"),
+        str(examples / "equations.md"),
+    ]
+    assert "Done in" in console.err and "2 converted" in console.err
+
+    console = CapturingConsole()
+    assert cli.main([str(examples)], console=console) == cli.EXIT_OK
+    assert "Nothing to do" in console.err
+
+
+def test_main_quiet_prints_only_paths(examples, fake_client, monkeypatch):
+    monkeypatch.setenv("DATALAB_API_KEY", "k")
+    console = CapturingConsole(quiet=True)
+    assert cli.main([str(examples / "equations.pdf"), "-q"], console=console) == 0
+    assert console.err == ""
+    assert console.out.strip().endswith("equations.md")
+
+
+def test_main_reports_failures_with_exit_code(examples, monkeypatch):
+    from docs_to_md.models import ConvertResult
+
+    client = FakeClient(lambda *a: [ConvertResult(status="failed", error="nope")])
+    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: client)
+    monkeypatch.setenv("DATALAB_API_KEY", "k")
+    console = CapturingConsole()
+    assert cli.main([str(examples)], console=console) == cli.EXIT_FAILURES
+    assert "2 failed" in console.err
+
+
+def test_main_usage_errors(tmp_path):
+    console = CapturingConsole()
+    assert cli.main([str(tmp_path / "missing.pdf"), "-n"], console=console) == cli.EXIT_USAGE
+    assert "Input not found" in console.err
+    assert cli.main([str(tmp_path)], console=console) == cli.EXIT_USAGE  # no API key
+
+
+def test_main_no_files(tmp_path):
+    console = CapturingConsole()
+    assert cli.main([str(tmp_path), "-n"], console=console) == cli.EXIT_FAILURES
+    assert "No supported files" in console.err
+
+
+def test_main_fatal_api_error(examples, monkeypatch):
+    class Failing(FakeClient):
+        def submit(self, path, options):
+            raise FatalAPIError("Authentication failed: bad key")
+
+    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: Failing())
+    monkeypatch.setenv("DATALAB_API_KEY", "k")
+    console = CapturingConsole()
+    assert cli.main([str(examples)], console=console) == cli.EXIT_USAGE
+    assert "Authentication failed" in console.err
+
+
+def test_main_interrupted(examples, monkeypatch):
+    class Interrupting(FakeClient):
+        def submit(self, path, options):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "DatalabClient", lambda api_key, stop_event: Interrupting())
+    monkeypatch.setenv("DATALAB_API_KEY", "k")
+    console = CapturingConsole()
+    assert cli.main([str(examples)], console=console) == cli.EXIT_INTERRUPTED
+    assert "Interrupted" in console.err
+
+
+def test_entrypoint_exits_with_main_code(monkeypatch):
+    monkeypatch.setattr(cli, "main", lambda: 1)
+    with pytest.raises(SystemExit) as exc:
+        cli.entrypoint()
+    assert exc.value.code == 1
+
+
+@pytest.mark.parametrize("code", [2, 130])
+def test_entrypoint_hard_exits_when_workers_may_be_busy(monkeypatch, code):
+    codes = []
+    monkeypatch.setattr(cli, "main", lambda: code)
+    monkeypatch.setattr(cli.os, "_exit", codes.append)
+    with pytest.raises(SystemExit):  # the real os._exit never returns
+        cli.entrypoint()
+    assert codes == [code]
