@@ -16,8 +16,13 @@ from tqdm import tqdm
 
 
 def format_cost(cents: float) -> str:
+    """Dollars to the tenth of a cent below $1 (``$0.070``, ``$0.008``), else to the cent."""
     dollars = cents / 100
-    return f"${dollars:.2f}" if dollars >= 0.01 or dollars == 0 else f"${dollars:.4f}"
+    if dollars >= 1:
+        return f"${dollars:.2f}"
+    if 0 < dollars < 0.0005:
+        return "<$0.001"
+    return f"${dollars:.3f}"
 
 
 def format_elapsed(seconds: float) -> str:

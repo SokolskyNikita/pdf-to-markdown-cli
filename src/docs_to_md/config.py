@@ -36,6 +36,9 @@ class Config:
     overwrite: bool = False
     dry_run: bool = False
     reflow_markdown: bool = True
+    normalize_superscripts: bool = True
+    keep_partial: bool = False  # write a file even if some of its chunks fail
+    split_spreads: bool = False  # send each half of a landscape PDF page separately
     extra_options: dict = field(default_factory=dict)  # passed through to the backend
 
     def validate(self) -> Config:
@@ -54,6 +57,10 @@ class Config:
         if self.mode is not None and self.mode not in info.modes:
             choices = f" (choose from {', '.join(info.modes)})" if info.modes else ""
             raise ConfigurationError(f"Unsupported mode for {info.label}: {self.mode}{choices}")
+        if self.keep_partial and self.output_format == "json":
+            raise ConfigurationError("--keep-partial works only with Markdown or HTML output")
+        if self.split_spreads and not info.splits_spreads:
+            raise ConfigurationError(f"--split-spreads is not available for the {info.label} backend")
         if self.model is not None and info.default_model is None:
             raise ConfigurationError(f"The {info.label} backend does not take --model")
         if self.chunk_size is not None and self.chunk_size < 1:

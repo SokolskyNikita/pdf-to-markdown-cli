@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,15 @@ PRICES: dict[str, float] = {
 KEEPS_HEADERS = frozenset(name for name, price in PRICES.items() if price < 4.0)
 
 _DATA_URL = re.compile(r"^data:[^,]*;base64,")
+# A footer line that is only a page number, e.g. "12", "- 12 -", "[xiv]".
+_PAGE_NUMBER = re.compile(r"^[\s\-–—.()\[\]|]*(?:\d{1,4}|[ivxlcdm]{1,8})[\s\-–—.()\[\]|]*$", re.IGNORECASE)
+# A footer line that starts with a footnote marker: "1 Cf.", "¹", "*", "<sup>1</sup>", "$^{1}$".
+_FOOTNOTE_START = re.compile(r"^\s*(?:\d|[¹²³⁴⁵⁶⁷⁸⁹⁰*†‡§]|<sup>|\$\^|\[\^)")
+# A header line that is a footnote: "$^{1}$ Cf.", "(1) Cf.", "14. La". Running
+# heads often start with a bare page number, so that doesn't count here.
+_HEADER_FOOTNOTE = re.compile(
+    r"^\s*(?:[¹²³⁴⁵⁶⁷⁸⁹⁰]+|<sup>[^<]*</sup>|\$\^\{?[^$]*\}?\$|\[\^[^\]]*\]|\(\d{1,3}\)|\d{1,3}\.(?=\s))\s*\S"
+)
 
 
 def requested_pages(page_range: str | None, max_pages: int | None) -> list[int] | None:
@@ -96,6 +106,7 @@ class OCRRequest:
         }
         if self.model not in KEEPS_HEADERS:
             # Running headers, footers, and page numbers go to separate fields.
+            # Footnotes land there too, so parse_response adds them back.
             body.update(extract_header=True, extract_footer=True)
         if self.pages is not None and kind == "document_url":
             body["pages"] = self.pages
@@ -123,8 +134,42 @@ def _link(name: str) -> re.Pattern[str]:
     return re.compile(rf"!?\[[^\]\n]*\]\({re.escape(name)}\)")
 
 
-def _page_markdown(page: dict[str, Any], include_images: bool, images: dict[str, str]) -> str:
+def _footer_key(line: str) -> str:
+    """``line`` with numbers blanked, so running footers match across pages."""
+    return re.sub(r"\d+", "#", " ".join(line.split()).lower())
+
+
+def _notes(pages: list[dict[str, Any]]) -> list[str]:
+    """The footnotes Mistral split out of each page's text.
+
+    With header and footer extraction on, OCR 4.x puts footnotes in the footer
+    along with the page number, so the footer is kept minus page numbers and
+    running footers (lines that repeat on another page and aren't footnotes).
+    On a scan of two facing pages, the left page's footnotes can land in the
+    header instead, between the running heads.
+    """
+    footers = [str(page.get("footer") or "").splitlines() for page in pages]
+    seen = Counter(key for lines in footers for key in {_footer_key(line) for line in lines if line.strip()})
+
+    def dropped(line: str) -> bool:
+        if not line.strip():
+            return False
+        if _PAGE_NUMBER.match(line):
+            return True
+        return seen[_footer_key(line)] > 1 and not _FOOTNOTE_START.match(line)
+
+    notes = []
+    for page, lines in zip(pages, footers, strict=True):
+        header = [line for line in str(page.get("header") or "").splitlines() if _HEADER_FOOTNOTE.match(line)]
+        text = "\n".join([*header, *(line for line in lines if not dropped(line))])
+        notes.append(re.sub(r"\n{3,}", "\n\n", text).strip())
+    return notes
+
+
+def _page_markdown(page: dict[str, Any], notes: str, include_images: bool, images: dict[str, str]) -> str:
     text = str(page.get("markdown") or "")
+    if notes:
+        text = f"{text.rstrip()}\n\n{notes}" if text.strip() else notes
     # With --api-option table_format=..., tables come separately behind [tbl-0.md](tbl-0.md).
     for table in page.get("tables") or []:
         name, content = str(table.get("id") or ""), str(table.get("content") or "")
@@ -154,7 +199,10 @@ def parse_response(data: dict[str, Any], requested_model: str, include_images: b
         raise APIError("the API returned no pages")
     pages = sorted(pages, key=lambda page: int(page.get("index") or 0))
     images: dict[str, str] = {}
-    texts = [_page_markdown(page, include_images, images) for page in pages]
+    notes = _notes(pages)
+    texts = [
+        _page_markdown(page, note, include_images, images) for page, note in zip(pages, notes, strict=True)
+    ]
     usage = data.get("usage_info") or {}
     processed = int(usage.get("pages_processed") or len(pages))
     return OCRResult(

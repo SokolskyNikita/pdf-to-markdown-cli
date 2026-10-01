@@ -11,6 +11,7 @@ import json
 import re
 import threading
 
+import pikepdf
 import pytest
 
 from docs_to_md.assemble import join_pages
@@ -20,9 +21,9 @@ from docs_to_md.backends.openai.client import OpenAIClient
 from docs_to_md.backends.openai.models import (
     TranscribeRequest,
     cost_cents,
-    instructions_for,
     parse_response,
 )
+from docs_to_md.backends.openai.prompt import instructions_for
 from docs_to_md.config import Config
 from docs_to_md.discovery import plan_jobs
 from docs_to_md.errors import APIError, ConfigurationError, FatalAPIError
@@ -97,7 +98,7 @@ def test_info_describes_the_responses_api():
     assert info.output_formats == {"markdown", "html"}
     assert info.modes == ("fast", "balanced", "accurate")
     assert info.max_upload_bytes == 50 * 1024 * 1024
-    assert (info.chunk_size, info.default_model) == (5, "gpt-6-luna")
+    assert (info.chunk_size, info.default_model) == (1, "gpt-6-luna")
     assert info.api_key_env_vars == ("OPENAI_API_KEY",)
     router = OpenRouterBackend.info
     assert (router.name, router.label, router.default_model) == (
@@ -213,6 +214,8 @@ def test_instructions_follow_the_output_format():
     markdown = instructions_for("markdown", 3, describe_figures=True)
     assert "in order: 3 pages." in markdown and "GitHub-flavored Markdown tables" in markdown
     assert "one-sentence description" in markdown
+    assert "two facing book pages" in markdown and "a misspelled word stays misspelled" in markdown
+    assert "[sic]" in markdown and "Ex.<sup>mo</sup>" in markdown
     html = instructions_for("html", 1, describe_figures=False)
     assert "in order: 1 page." in html and "<table>" in html and "Leave out illustrations" in html
 
@@ -264,14 +267,66 @@ def test_wrong_page_count_is_retried_once(examples, console):
     assert (examples / "alice_in_wonderland_sample.md").read_text() == "a\n\nb\n\nc\n"
 
 
-def test_wrong_page_count_twice_fails_the_file(examples, console):
+def test_facing_pages_in_one_scan_are_joined(examples, console):
+    # A landscape scan of two book pages often comes back as two pages.
     summary, client = run(
         [examples / "alice_in_wonderland_sample.pdf"],
         console,
-        FakeResponses(lambda body, i: payload(["x"] * 4)),
+        FakeResponses(lambda body, i: payload(["left\n", "", "right"])),
+        chunk_size=1,
+        paginate=True,
     )
-    assert summary.exit_code == 1 and len(client.bodies) == 2
-    assert "returned 4 pages for 3 (try a smaller --chunk-size)" in console.err
+    assert summary.exit_code == 0 and len(client.bodies) == 3  # no retries
+    text = (examples / "alice_in_wonderland_sample.md").read_text()
+    assert [int(n) for n in MARKER.findall(text)] == [0, 1, 2]
+    assert text.count("left\n\nright") == 3
+
+
+def test_split_spreads_sends_each_half_on_its_own(tmp_path, console):
+    with pikepdf.new() as pdf:
+        pdf.add_blank_page(page_size=(1000, 700))  # a two-page scan
+        pdf.add_blank_page(page_size=(500, 700))
+        pdf.save(tmp_path / "book.pdf")
+
+    summary, client = run([tmp_path], console, chunk_size=2, paginate=True, split_spreads=True)
+    assert summary.exit_code == 0 and summary.pages == 2
+    assert len(client.bodies) == 3  # one request per half and one for the plain page
+    assert all("in order: 1 page." in body["instructions"] for body in client.bodies)
+    text = (tmp_path / "book.md").read_text()
+    assert [int(n) for n in MARKER.findall(text)] == [0, 1]
+    assert "0001of0003.pdf page 0\n\n0002of0003.pdf page 0" in text  # the halves, joined
+    assert "0003of0003.pdf page 0" in text
+
+
+def test_split_spreads_needs_a_backend_that_returns_pages(tmp_path):
+    with pytest.raises(ConfigurationError, match="--split-spreads is not available for the Datalab backend"):
+        Config(inputs=[tmp_path], api_key="k", split_spreads=True).validate()
+    assert Config(inputs=[tmp_path], backend="openrouter", api_key="k", split_spreads=True).validate()
+
+
+def test_wrong_page_count_twice_retries_page_by_page(examples, console):
+    def responder(body, index):
+        if "in order: 3 pages." in body["instructions"]:
+            return payload(["x"] * 4)
+        return FakeResponses.echo_pages(body, index)
+
+    summary, client = run(
+        [examples / "alice_in_wonderland_sample.pdf"], console, FakeResponses(responder), paginate=True
+    )
+    assert summary.exit_code == 0 and len(client.bodies) == 5  # 2 for the chunk, then 1 per page
+    text = (examples / "alice_in_wonderland_sample.md").read_text()
+    assert [int(n) for n in MARKER.findall(text)] == [0, 1, 2]
+    assert "0001of0003.pdf page 0" in text and "0003of0003.pdf page 0" in text
+    assert summary.cost_cents == pytest.approx(5 * 20.0)  # every request is paid for (1M tokens at 2x)
+
+
+def test_a_page_that_never_comes_back_fails_the_file(examples, console):
+    def responder(body, index):
+        return payload(["x"] * 4 if "3 pages" in body["instructions"] else [])
+
+    summary, _ = run([examples / "alice_in_wonderland_sample.pdf"], console, FakeResponses(responder))
+    assert summary.exit_code == 1
+    assert "returned 0 pages for 1" in console.err
 
 
 def test_cost_is_reported(examples, console):

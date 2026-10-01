@@ -2,7 +2,7 @@
 
 This page collects what we learned in September 2026 about which models convert documents to Markdown best, and at what price. It covers the backends `pdf-to-md` supports today, then the remote APIs and local models that are candidates for future backends.
 
-Everything here was gathered on 29 September 2026. Prices and scores move quickly, so re-check the sources before relying on a number.
+Most of this was gathered on 29 September 2026; the scanned-book test ran on 30 September. Prices and scores move quickly, so re-check the sources before relying on a number.
 
 ## How to read the numbers
 
@@ -16,7 +16,7 @@ Everything here was gathered on 29 September 2026. Prices and scores move quickl
 
 Most leaderboards are run by a vendor whose product ranks at or near the top. Scores marked ˢ are the vendor's claims about its own product. Differences under about 3 points are noise, and the same model can score 10+ points apart depending on who ran it.
 
-**Our sample tests** ran the PDFs in [`examples/`](../examples) (8 files and 16 pages at the time) through each option, and scored:
+**Our sample tests** ran the PDFs in [`examples/`](../examples) (8 files and 16 pages at the time) through each option. A separate [scanned-book test](#scanned-book-test) covers two-page scans, footnotes and archaic spelling. The sample tests scored:
 
 - **Keywords:** the required words from `tests/samples.py` (17 in total).
 - **1880 / 1980 cells:** 31 census values read off the scans by hand. They're the cells where Datalab and Mistral disagreed, so they're the hardest ones.
@@ -72,10 +72,12 @@ We compared OCR 3, 4.0 and 4.1 on the samples, each with four output settings (9
 - **OCR 4.1 isn't better than 4.0.** It dropped the Luxembourger row from the 1980 table and writes math as `\( … \)` and `\[ … \]` instead of `$`.
 - **The 1880 census is Mistral's weak spot.** OCR 4.x misread 6 of the 16 hard cells (for example 2,038 became 2,698) and dropped a couple of small rows.
 - **Output settings don't change accuracy.** `table_format` only changes where tables sit in the response. `extract_header` / `extract_footer` works on 4.x, but on OCR 3 it moved the whole Chinese page body into the header, so the backend leaves it off for OCR 3.
+- **Footnotes go to the footer.** With footer extraction on, OCR 4.x returns footnotes in the `footer` field next to the page number, and on two-page scans it sometimes puts the left page's footnotes in `header`. Up to 1.4.0 the backend dropped both, losing 26 of 49 footnotes in an earlier test of two-page scans. It now adds them back at the end of the page, minus page numbers and repeated running footers.
 - **Confidence scores can't flag bad pages.** The faded 1880 pages averaged 0.98, as high as clean prose, so "retry low-confidence pages elsewhere" wouldn't catch the digit errors.
 - **Public scores:** OCR 3 scores 81.7 on olmOCR-Bench in an independent run (79.1 without headers and footers). OCR 4.0's 85.2 and 93.07 on OmniDocBench are Mistral's own claims; independently it scores 78.2 on MDPBench (photographed and non-Latin pages) and 0.862 on PulseBench-Tab, the highest listed on that tables benchmark (run by Pulse, a competitor). OCR 4.1 has no published full-page scores.
 - **Formats:** HTML, RTF and plain text come back as raw source, so the backend doesn't accept them.
 - OpenRouter's `mistral-ocr` PDF engine is OCR 3, with no version choice or output options.
+- Mistral's pricing page now lists OCR 4.1 at the same $4 per 1,000 pages. The backend still defaults to 4.0 for the reasons above.
 
 ### GPT-6 Luna (OpenAI and OpenRouter)
 
@@ -84,12 +86,42 @@ GPT-6 Luna costs $0.10 per million input tokens and $0.50 per million output ($0
 - **Cost:** all 25 sample pages cost about 2¢ on either route. That's about $0.80 per 1,000 pages on average and about $2 for dense census tables. `--api-option service_tier=flex` halves the price on OpenAI.
 - **Accuracy:** every sample passed its checks, including all 31 hard census cells that Datalab `fast` and Mistral missed. Chinese agreement was lower (89.4, not investigated).
 - **Variation:** in about 30 live runs it once dropped the "Corollary" label and once lost a LaTeX backslash. Neither repeated.
-- **Chunk size:** requests of 5 and 8 pages came back with the right page count, but a 16-page request came back as 20 pages. That's why the backend defaults to 5 pages and retries once on a mismatch.
+- **Chunk size:** on the original samples, requests of 5 and 8 pages came back with the right page count, but a 16-page request came back as 20 pages. On scans of two facing book pages (the earlier private test under [scanned-book test](#scanned-book-test)), 5-page requests in `fast` mode twice came back with the right count but text shifted between pages, and one book scored 53–55%. One page per request fixed it, ran faster and cost no more, so the backend now defaults to 1 page. With larger chunks, a wrong count is retried once and then sent page by page.
 - **Reasoning:** `--mode` maps to reasoning effort (`fast` none, `balanced` low, `accurate` medium). On ParseBench it scores 52.9 with no reasoning, 59.3 low, 62.4 medium and 65.8 at max.
 - **Speed:** about 7 s per page with reasoning off (Artificial Analysis); about 14 s per page in our one-page-per-request test.
 - **Limits:** no image files, PDF and image inputs only, Markdown and HTML only.
 
 GPT-5.6 Luna (`--model gpt-5.6-luna`) costs twice as much and scores 56.3–68.3 on ParseBench.
+
+### Scanned-book test
+
+[`benchmarks/scanned_books/`](../benchmarks/scanned_books) holds 16 PDF pages from three public-domain books, each with a reference transcription checked against the page image:
+
+- 8 two-page spreads of Padre António Vieira's letters (Coimbra, 1928), with no text layer, 28 footnotes, superscript abbreviations, and pre-1945 Portuguese accents and misprints.
+- 5 pages of Multatuli's Dutch and French letters (1891), in his own spelling.
+- 3 pages of Mme de Sévigné's letters (1862), with 19 notes, plus IA's OCR as a text layer.
+
+The scorer measures word accuracy, footnotes found (47), 42 printed spellings and misprints that must survive verbatim, and 8 checks that a spread's left-page footnotes come before the right page's text. Results from 30 September 2026, at each backend's defaults:
+
+| Setting | Accuracy | Spelling | Order | Footnotes | $ for 16 pages |
+|---|---|---|---|---|---|
+| Datalab `accurate` | **99.50%** | 21/42 | **8/8** | 47 | 0.12 |
+| Datalab `balanced` | 99.14% | 16/42 | 8/8 | 47 | 0.048 |
+| Datalab `fast` | 98.81% | 18/42 | 7/8 | 47 | 0.048 |
+| GPT-6 Luna `accurate` | 98.42% | 22/42 | 6/8 | 43 | 0.026 |
+| GPT-6 Luna `fast` | 98.37% | **26/42** | 3/8 | 47 | 0.013 |
+| Mistral OCR 4.0 | 97.93% | 18/42 | 3/8 | 47 | 0.064 |
+| GPT-6 Luna `balanced` | 94.79% | 23/42 | 4/8 | 45 | 0.016 |
+
+- **Datalab `accurate` is the most accurate** and keeps every footnote in place on two-page scans.
+- **No backend keeps printed spelling reliably.** The best kept 26 of 42. Datalab and Mistral modernise some words ("pretenção" to "pretensão", "plûtot" to "plutôt") and archaise others ("étaient" to "étoient"). GPT-Luna fixes misprints ("benegnidade", "Castslo") despite being told not to.
+- **GPT-Luna sometimes drops half of a spread.** In `balanced` mode it transcribed only the left page of the first spread, on both OpenAI and OpenRouter. That page ends mid-sentence just above its footnotes. It also tends to move left-page footnotes to the end of the scan. **`--split-spreads` fixes both:** it sends each half as its own page, and GPT-Luna then scored 98.5–98.8% with every left-page footnote in order (8/8), at the same cost.
+- **Mistral puts a spread's left-page footnotes in its `header` field**, and its right-page notes in `footer`. pdf-to-md adds both back at the end of the page, so they are kept but out of order. With `--split-spreads` Mistral scored 99.07% with every footnote in order, at 1.5 times the cost, because each half is billed as a page.
+- **GPT-Luna `accurate` was no better than the other modes** and cost twice as much as `balanced`.
+- **Superscripts:** Datalab writes `<sup>`, Mistral LaTeX (`$^{a}$`), and GPT-Luna Unicode (`Ex.ᵐᵒ`, `¹`). pdf-to-md now writes `<sup>` for all of them.
+- **Two-page scans cost one page** on Datalab and Mistral, which bill per PDF page. `--paginate` numbers them as one page too.
+
+An earlier private test on 40 pages of a copyrighted Portuguese edition, also with two-page scans, showed the same patterns. It led to the Mistral footnote fix, one page per GPT-Luna request, and superscript normalisation. Before the fixes, Mistral lost 26 of 49 footnotes, and GPT-Luna `fast` failed on two-page scans.
 
 ## 2. Remote APIs for future backends
 

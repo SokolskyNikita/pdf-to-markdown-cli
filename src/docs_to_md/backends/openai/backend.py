@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import tempfile
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from docs_to_md.assemble import ChunkOutput, join_pages
@@ -19,10 +21,12 @@ from docs_to_md.backends.openai.models import (
     OUTPUT_FORMATS,
     REASONING_EFFORT,
     TranscribeRequest,
+    estimate_cents,
     parse_response,
 )
 from docs_to_md.errors import APIError
-from docs_to_md.pdf import Chunk
+from docs_to_md.pdf import Chunk, split_pdf
+from docs_to_md.spreads import join_halves, spread_halves
 
 if TYPE_CHECKING:
     from docs_to_md.config import Config
@@ -40,10 +44,14 @@ class OpenAIBackend(Backend):
         output_formats=OUTPUT_FORMATS,
         modes=MODES,
         max_upload_bytes=50 * 1024 * 1024,
-        chunk_size=5,
+        # One page per request: on scans of two facing book pages, multi-page
+        # requests came back with pages split and merged into the right count,
+        # shifting text onto the wrong pages. Single pages were also faster.
+        chunk_size=1,
         default_model=DEFAULT_MODEL,
         api_key_env_vars=("OPENAI_API_KEY",),
         api_key_url="https://platform.openai.com/api-keys",
+        splits_spreads=True,
     )
 
     base_url = DEFAULT_BASE_URL
@@ -64,6 +72,11 @@ class OpenAIBackend(Backend):
         )
         return cls(config, client)
 
+    @classmethod
+    def estimate_cents(cls, config: Config, pages: int) -> float | None:
+        tier = config.extra_options.get("service_tier")
+        return estimate_cents(config.model or cls.info.default_model or DEFAULT_MODEL, pages, tier)
+
     def model_name(self) -> str:
         return self.config.model or self.info.default_model or DEFAULT_MODEL
 
@@ -82,6 +95,24 @@ class OpenAIBackend(Backend):
         return {**self.extra_body, **request.body(chunk.path)}  # --api-option wins
 
     def convert(self, chunk: Chunk, check_cancelled: CancelCheck) -> ChunkOutput:
+        if self.config.split_spreads and chunk.pages:
+            # Each half of a two-page scan goes in a request of its own: the model
+            # reads the left page in full, footnotes included, can't skip a half,
+            # and can't carry a sentence over from one half into the other.
+            with spread_halves(chunk) as (halves, counts):
+                texts, cost = self._transcribe_each(halves, check_cancelled)
+            pages = join_halves(texts, counts)
+        else:
+            pages, cost = self._transcribe(chunk, check_cancelled)
+        return ChunkOutput(
+            pages=chunk.pages,
+            content=join_pages(pages, self.config.output_format, self.config.paginate),
+            page_count=len(pages),
+            cost_cents=cost,
+        )
+
+    def _transcribe(self, chunk: Chunk, check_cancelled: CancelCheck) -> tuple[list[str], float]:
+        """One transcription per page of ``chunk``, and what they cost in cents."""
         request = self.request_for(chunk)
         body = self.body_for(chunk, request)
         what = f"Transcription of {chunk.path.name}"
@@ -91,19 +122,28 @@ class OpenAIBackend(Backend):
             result = parse_response(self.client.create_response(body, what), request.model)
             cost += result.cost_cents or 0.0
             if len(result.pages) == request.page_count:
-                break
+                return result.pages, cost
+            if request.page_count == 1 and result.pages:
+                # A scan of two facing book pages can come back as two pages.
+                return join_halves(result.pages, [len(result.pages)]), cost
             logger.debug("%s: got %d pages, expected %d", what, len(result.pages), request.page_count)
-        else:
-            raise APIError(
-                f"the model returned {len(result.pages)} pages for {request.page_count}"
-                " (try a smaller --chunk-size)"
-            )
-        return ChunkOutput(
-            pages=chunk.pages,
-            content=join_pages(result.pages, self.config.output_format, self.config.paginate),
-            page_count=request.page_count,
-            cost_cents=cost,
-        )
+        if request.page_count == 1:
+            raise APIError(f"the model returned {len(result.pages)} pages for 1")
+
+        logger.debug("%s: still the wrong page count, sending pages one at a time", what)
+        pages, page_cost = self._transcribe_each(chunk, check_cancelled)
+        return pages, cost + page_cost
+
+    def _transcribe_each(self, chunk: Chunk, check_cancelled: CancelCheck) -> tuple[list[str], float]:
+        """``_transcribe`` with one request per page of ``chunk``."""
+        pages: list[str] = []
+        cost = 0.0
+        with tempfile.TemporaryDirectory(prefix="pdf-to-md-") as tmp:
+            for single in split_pdf(chunk.path, Path(tmp), 1):
+                texts, page_cost = self._transcribe(single, check_cancelled)
+                pages.extend(texts)
+                cost += page_cost
+        return pages, cost
 
 
 class OpenRouterBackend(OpenAIBackend):

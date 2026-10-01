@@ -2,7 +2,7 @@
 
 Skipped by default. Run them with a key:
 
-    MISTRAL_API_KEY=... pytest -m live tests/test_live_mistral.py
+    MISTRAL_API_KEY=... pytest -m live -n 8 tests/test_live_mistral.py
 
 A full run reads every sample page once (about 10 cents).
 """

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from docs_to_md.backends.base import parse_option_value
+from docs_to_md.backends.openai.prompt import instructions_for
 from docs_to_md.errors import APIError
 
 DEFAULT_MODEL = "gpt-6-luna"
@@ -58,6 +59,9 @@ PRICES: dict[str, Price] = {
 LONG_CONTEXT_TOKENS = 272_000
 # Flex and Batch cost half; other tiers (priority, fast) aren't priced here.
 TIER_MULTIPLIERS: dict[str, float] = {"default": 1.0, "auto": 1.0, "flex": 0.5, "batch": 0.5}
+# Typical usage per page for dry-run estimates: about 0.08 cents with GPT-6 Luna,
+# close to what text-heavy scans cost in our tests. Dense tables cost more.
+ESTIMATED_TOKENS_PER_PAGE = {"input_tokens": 3_000, "output_tokens": 1_000}
 
 _PAGES_SCHEMA = {
     "type": "object",
@@ -65,57 +69,6 @@ _PAGES_SCHEMA = {
     "required": ["pages"],
     "additionalProperties": False,
 }
-
-_FORMAT_RULES = {
-    "markdown": """\
-- Write Markdown: `#` headings that follow the document's hierarchy, lists, `>`
-  block quotes, and `*italic*` / `**bold**` where the page uses them.
-- Write tables as GitHub-flavored Markdown tables with every row and cell. If a
-  header spans several columns, repeat it in each column it covers.
-- Write mathematics as LaTeX: `$...$` inline and `$$...$$` for display equations.""",
-    "html": """\
-- Write each page as an HTML fragment (no <html>, <head>, or <body>) using
-  semantic tags: <h1>-<h6>, <p>, <ul>/<ol>, <blockquote>, <em>, <strong>, <sup>.
-- Write tables as <table> with every row and cell; use colspan and rowspan for
-  spanning headers.
-- Write mathematics as LaTeX inside <math> elements, with display="block" for
-  display equations.""",
-}
-
-_FIGURE_RULES = {
-    True: "- Replace each illustration, photo, chart, or diagram with a one-sentence description"
-    " in italics, in square brackets. Keep any printed caption as text.",
-    False: "- Leave out illustrations, photos, charts, and diagrams, but keep their printed captions.",
-}
-
-INSTRUCTIONS = """\
-You transcribe document pages into {format_name}. Return JSON whose "pages" array
-has exactly one string per input page, in order: {page_count} page{plural}. Never
-merge, split, skip, or reorder pages. A blank page is an empty string.
-
-Transcribe faithfully:
-- Copy every word of the body text exactly as printed, in its original language,
-  script, spelling, and punctuation. Do not translate, modernize, correct,
-  summarize, or add commentary.
-- Follow the reading order: columns in order, and vertical text (as in Chinese
-  or Japanese) written out as horizontal lines in its reading order.
-- Leave out running headers, running footers, page numbers, library stamps, and
-  scanning artifacts.
-- Write each paragraph as one line of text. Rejoin words hyphenated across line
-  breaks, and keep line breaks only where they matter, as in verse.
-- Put footnotes at the end of the page they appear on, with their markers.
-{format_rules}
-{figure_rules}"""
-
-
-def instructions_for(output_format: str, page_count: int, describe_figures: bool) -> str:
-    return INSTRUCTIONS.format(
-        format_name="Markdown" if output_format == "markdown" else "HTML",
-        page_count=page_count,
-        plural="s" * (page_count != 1),
-        format_rules=_FORMAT_RULES[output_format],
-        figure_rules=_FIGURE_RULES[describe_figures],
-    )
 
 
 @dataclass
@@ -179,6 +132,12 @@ def cost_cents(model: str, usage: dict[str, Any], service_tier: str | None) -> f
         + output_multiplier * int(usage.get("output_tokens") or 0) * price.output
     ) / 1_000_000
     return dollars * multiplier * 100
+
+
+def estimate_cents(model: str, pages: int, service_tier: str | None) -> float | None:
+    """A rough list-price estimate for ``pages`` pages, or None for unknown models."""
+    per_page = cost_cents(model.removeprefix("openai/"), ESTIMATED_TOKENS_PER_PAGE, service_tier)
+    return None if per_page is None else per_page * pages
 
 
 def parse_response(data: dict[str, Any], requested_model: str) -> TranscribeResult:

@@ -46,6 +46,7 @@ class BackendInfo:
     default_model: str | None = None  # None if the backend takes no --model
     api_key_env_vars: tuple[str, ...] = ()  # lookup order; empty if no key is needed
     api_key_url: str | None = None  # where to get a key
+    splits_spreads: bool = False  # supports --split-spreads
 
     @property
     def requires_api_key(self) -> bool:
@@ -73,6 +74,14 @@ class Backend(ABC):
         ``stop_event`` is set when the run is interrupted. Long waits should wake
         up on it instead of sleeping through Ctrl-C.
         """
+
+    @classmethod
+    def estimate_cents(cls, config: Config, pages: int) -> float | None:
+        """What converting ``pages`` PDF pages should cost at list price, for dry runs.
+
+        None means the backend can't tell.
+        """
+        return None
 
     @abstractmethod
     def convert(self, chunk: Chunk, check_cancelled: CancelCheck) -> ChunkOutput:

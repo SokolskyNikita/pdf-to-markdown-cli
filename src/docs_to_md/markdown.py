@@ -16,7 +16,7 @@ _STRUCTURE_PATTERNS = tuple(
         r"^\s{0,3}(?:=+|-+)\s*$",  # setext heading underline
         r"^\s{0,3}([-*_])(?:\s*\1){2,}\s*$",  # thematic break
         r"^\s*\|.*\|\s*$",  # table row
-        r"^\s*<[^>]+>",  # HTML block
+        r"^\s*<(?!/?su[pb]>)[^>]+>",  # HTML block (a footnote starting with <sup> is prose)
         r"^\s*\$\$",  # display math
     )
 )
@@ -54,6 +54,44 @@ def remove_duplicate_captions(content: str) -> str:
     paragraph under the image; the alt text alone keeps the information.
     """
     return _IMAGE_THEN_CAPTION.sub(lambda m: m.group(1), content)
+
+
+# Unicode superscript digits and modifier letters -> plain characters. The
+# ordinal indicators ª and º are ordinary letters (1º, 4ª série) and stay.
+_SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ"
+_PLAIN = str.maketrans(_SUPERSCRIPTS, "0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVW")
+_UNICODE_SUPERSCRIPT = re.compile(f"[{_SUPERSCRIPTS}]+")
+# Math that is nothing but a superscript: $^{a}$, $^1$, $^{\text{mo}}$, ${}^{2}$.
+_LATEX_SUPERSCRIPT = re.compile(
+    r"\$(?:\{\})?\^(?:\{\s*(?:\\(?:text|textrm|mathrm|rm)\s*\{)?([^${}\\\n]{1,12}?)\}?\s*\}|([^\s${}\\]))\$"
+)
+
+
+def normalize_superscripts(content: str) -> str:
+    """Write superscripts as ``<sup>`` outside code blocks, whatever the backend used.
+
+    Datalab writes ``<sup>a</sup>``, Mistral ``$^{a}$``, and LLMs often use
+    Unicode (``Ex.ᵐᵒ``, ``¹``). Other math is left alone.
+    """
+
+    def convert(text: str) -> str:
+        text = _LATEX_SUPERSCRIPT.sub(lambda m: f"<sup>{(m.group(1) or m.group(2)).strip()}</sup>", text)
+        return _UNICODE_SUPERSCRIPT.sub(lambda m: f"<sup>{m.group().translate(_PLAIN)}</sup>", text)
+
+    output: list[str] = []
+    prose: list[str] = []
+    in_fence = False
+    for line in content.splitlines(keepends=True):
+        fence = bool(_FENCE.match(line))
+        if in_fence or fence:
+            output.append(convert("".join(prose)))
+            prose.clear()
+            output.append(line)
+            in_fence ^= fence
+        else:
+            prose.append(line)
+    output.append(convert("".join(prose)))
+    return "".join(output)
 
 
 def normalize_line_breaks(content: str) -> str:

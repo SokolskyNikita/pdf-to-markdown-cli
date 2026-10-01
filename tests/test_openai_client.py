@@ -50,6 +50,26 @@ def test_retries_rate_limits_honoring_retry_after():
     assert client.delays[0] == 7.0
 
 
+def test_retries_failed_responses_unless_the_request_is_bad():
+    stream_ended = {"status": "failed", "error": {"message": "Stream ended before a terminal response event"}}
+    client, session = make_client(
+        FakeResponse(payload=stream_ended),
+        FakeResponse(payload={"status": "failed", "error": {"code": "server_error", "message": "oops"}}),
+        FakeResponse(payload={"status": "completed"}),
+    )
+    assert client.create_response(BODY, "t")["status"] == "completed"
+    assert len(session.calls) == 3
+
+    bad_image = {"status": "failed", "error": {"code": "invalid_image", "message": "unreadable"}}
+    client, session = make_client(FakeResponse(payload=bad_image))
+    assert client.create_response(BODY, "t") == bad_image  # parse_response reports it
+    assert len(session.calls) == 1
+
+    client, _ = make_client(*[FakeResponse(payload=stream_ended)] * MAX_ATTEMPTS)
+    with pytest.raises(RetryableAPIError, match="t: response failed: Stream ended"):
+        client.create_response(BODY, "t")
+
+
 def test_retries_network_errors_then_gives_up():
     client, _ = make_client(*[requests.ConnectionError("reset")] * MAX_ATTEMPTS)
     with pytest.raises(RetryableAPIError, match="t: network error"):

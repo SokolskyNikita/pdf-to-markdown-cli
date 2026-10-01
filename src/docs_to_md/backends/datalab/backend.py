@@ -11,9 +11,11 @@ from docs_to_md.assemble import ChunkOutput
 from docs_to_md.backends.base import Backend, BackendInfo, CancelCheck
 from docs_to_md.backends.datalab.client import DatalabClient
 from docs_to_md.backends.datalab.models import (
+    DEFAULT_MODE,
     INPUT_MIME_TYPES,
     MODES,
     OUTPUT_FORMATS,
+    PRICES,
     ConvertOptions,
     ConvertResult,
 )
@@ -50,6 +52,10 @@ class DatalabBackend(Backend):
     @classmethod
     def from_config(cls, config: Config, stop_event: threading.Event) -> DatalabBackend:
         return cls(config, DatalabClient(config.api_key or "", stop_event=stop_event))
+
+    @classmethod
+    def estimate_cents(cls, config: Config, pages: int) -> float | None:
+        return pages * PRICES[config.mode or DEFAULT_MODE] / 10  # $/1k pages -> cents per page
 
     def options_for(self, chunk: Chunk) -> ConvertOptions:
         """Form fields for ``chunk``.

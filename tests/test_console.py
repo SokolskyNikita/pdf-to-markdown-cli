@@ -87,7 +87,10 @@ def test_status_symbols_survive_legacy_encodings():
     assert raw.getvalue() == b"? done ? there\n"
 
 
-@pytest.mark.parametrize(("cents", "text"), [(0, "$0.00"), (0.3, "$0.0030"), (1, "$0.01"), (1234, "$12.34")])
+@pytest.mark.parametrize(
+    ("cents", "text"),
+    [(0, "$0.000"), (0.01, "<$0.001"), (0.3, "$0.003"), (0.8, "$0.008"), (7, "$0.070"), (1234, "$12.34")],
+)
 def test_format_cost(cents, text):
     assert format_cost(cents) == text
 

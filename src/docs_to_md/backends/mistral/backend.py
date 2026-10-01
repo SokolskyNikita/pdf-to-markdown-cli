@@ -13,10 +13,14 @@ from docs_to_md.backends.mistral.models import (
     INPUT_MIME_TYPES,
     OUTPUT_FORMATS,
     OCRRequest,
+    OCRResult,
+    cost_cents,
     parse_response,
     requested_pages,
 )
+from docs_to_md.errors import APIError
 from docs_to_md.pdf import Chunk
+from docs_to_md.spreads import join_halves, spread_halves
 
 if TYPE_CHECKING:
     from docs_to_md.config import Config
@@ -32,6 +36,7 @@ class MistralBackend(Backend):
         default_model=DEFAULT_MODEL,
         api_key_env_vars=("MISTRAL_API_KEY",),
         api_key_url="https://console.mistral.ai/api-keys",
+        splits_spreads=True,
     )
 
     def __init__(self, config: Config, client: MistralClient):
@@ -41,6 +46,10 @@ class MistralBackend(Backend):
     @classmethod
     def from_config(cls, config: Config, stop_event: threading.Event) -> MistralBackend:
         return cls(config, MistralClient(config.api_key or "", stop_event=stop_event, timeout=config.timeout))
+
+    @classmethod
+    def estimate_cents(cls, config: Config, pages: int) -> float | None:
+        return cost_cents(config.model or DEFAULT_MODEL, pages)
 
     def request_for(self, chunk: Chunk) -> OCRRequest:
         """The request for ``chunk``.
@@ -56,17 +65,29 @@ class MistralBackend(Backend):
             extra=dict(config.extra_options),
         )
 
-    def convert(self, chunk: Chunk, check_cancelled: CancelCheck) -> ChunkOutput:
+    def _ocr(self, chunk: Chunk, check_cancelled: CancelCheck) -> OCRResult:
         request = self.request_for(chunk)
         body = request.body(chunk.path)
         check_cancelled()
         data = self.client.ocr(body, f"OCR of {chunk.path.name}")
-        result = parse_response(data, request.model, request.include_images)
+        return parse_response(data, request.model, request.include_images)
+
+    def convert(self, chunk: Chunk, check_cancelled: CancelCheck) -> ChunkOutput:
+        if self.config.split_spreads and chunk.pages:
+            # Each half of a two-page scan is billed as a page of its own.
+            with spread_halves(chunk) as (halves, counts):
+                result = self._ocr(halves, check_cancelled)
+            if len(result.pages) != len(halves.pages):
+                raise APIError(f"the API returned {len(result.pages)} pages for {len(halves.pages)}")
+            pages = join_halves(result.pages, counts)
+        else:
+            result = self._ocr(chunk, check_cancelled)
+            pages = result.pages
         return ChunkOutput(
             # A whole document's pages are numbered by the API.
             pages=chunk.pages or result.indexes,
-            content=join_pages(result.pages, self.config.output_format, self.config.paginate),
+            content=join_pages(pages, self.config.output_format, self.config.paginate),
             images=result.images,
-            page_count=result.pages_processed,
+            page_count=len(pages),
             cost_cents=result.cost_cents or 0.0,
         )

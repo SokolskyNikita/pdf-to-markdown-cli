@@ -1,6 +1,7 @@
 name: Live API tests
 
-# Converts the sample documents with the real Datalab API (a few cents per run).
+# Converts the sample documents with the real APIs, 8 tests at a time (about
+# 30 cents per run; rate limits are retried with backoff).
 # Requires a DATALAB_API_KEY repository secret. MISTRAL_API_KEY,
 # OPENAI_API_KEY, and OPENROUTER_API_KEY secrets are optional: the Mistral and
 # GPT-Luna tests for each run only when its secret is set. Run it from the
@@ -39,4 +40,4 @@ jobs:
             echo "::error::Add a DATALAB_API_KEY repository secret to run live tests."
             exit 1
           fi
-          pytest -m live -v
+          pytest -m live -n 8 -v

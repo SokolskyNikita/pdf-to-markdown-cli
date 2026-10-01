@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdf-to-markdown-cli"
-version = "1.4.0"
+version = "1.5.0"
 description = "Convert PDFs, Office documents, ebooks, and images to Markdown, HTML, or JSON with the Datalab API, Mistral OCR, or GPT-Luna."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
@@ -53,6 +53,8 @@ pdf-to-md = "docs_to_md.cli:entrypoint"
 test = [
     "pytest>=9.1",
     "pytest-cov>=7.1",
+    "pytest-xdist>=3.8",  # the live suite runs in parallel: pytest -m live -n 8
+    "rapidfuzz>=3.14",  # scores the scanned-book benchmark
 ]
 dev = [
     "pdf-to-markdown-cli[test]",

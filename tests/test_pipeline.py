@@ -15,7 +15,7 @@ import pytest
 import docs_to_md.pipeline as pipeline_module
 from docs_to_md.config import Config
 from docs_to_md.discovery import plan_jobs
-from docs_to_md.errors import APIError, Cancelled, FatalAPIError
+from docs_to_md.errors import APIError, Cancelled, ConfigurationError, FatalAPIError
 from docs_to_md.pipeline import FAILED, SKIPPED, Pipeline
 
 from .conftest import FakeBackend
@@ -51,7 +51,7 @@ def test_converts_and_merges_chunks(examples, console):
         "img.png",
     ]
     assert console.out == f"{output}\n"
-    assert "✓" in console.err and "3 pages" in console.err and "$0.0060" in console.err
+    assert "✓" in console.err and "3 pages" in console.err and "$0.006" in console.err
     assert summary.pages == 3 and summary.cost_cents == pytest.approx(0.6)
 
 
@@ -126,6 +126,55 @@ def test_failed_file_does_not_stop_others(examples, console):
     assert (examples / "alice_in_wonderland_sample.md").exists()
     assert not (examples / "equations.md").exists()
     assert "equations.pdf: Could not parse" in console.err
+
+
+def failing_pages(backend, pages):
+    def handler(chunk, check_cancelled):
+        if set(chunk.pages) & set(pages):
+            raise APIError("Could not parse -- try again")
+        return backend.default_handler(chunk, check_cancelled)
+
+    return handler
+
+
+def test_keep_partial_writes_the_pages_that_worked(examples, console):
+    backend = FakeBackend()
+    backend.handler = failing_pages(backend, {1})
+    source = examples / "alice_in_wonderland_sample.pdf"
+    summary = run([source], console, backend, chunk_size=1, paginate=True, keep_partial=True)
+    assert summary.exit_code == 1 and summary.count(FAILED) == 1
+    assert len(backend.chunks) == 3  # the failure didn't cancel the other chunks
+    text = (examples / "alice_in_wonderland_sample.md").read_text()
+    # (The fake backend writes no page markers of its own.)
+    placeholder = f"{{1}}{'-' * 48}\n\n<!-- pdf-to-md: page 1 failed: Could not parse - try again -->"
+    assert text.index("# 0001of0003.pdf") < text.index(placeholder) < text.index("# 0003of0003.pdf")
+    assert summary.pages == 2 and summary.cost_cents == pytest.approx(0.6)
+    assert "1 page failed: Could not parse" in console.err
+    assert console.out == ""  # stdout lists only complete conversions
+
+
+def test_keep_partial_html(examples, console):
+    backend = FakeBackend("html")
+    backend.handler = failing_pages(backend, {0, 1})
+    source = examples / "alice_in_wonderland_sample.pdf"
+    summary = run([source], console, backend, chunk_size=2, output_format="html", keep_partial=True)
+    assert summary.exit_code == 1
+    html = (examples / "alice_in_wonderland_sample.html").read_text()
+    assert html.index("page 0 failed") < html.index("page 1 failed") < html.index("0002of0002.pdf")
+    assert "2 pages failed" in console.err
+
+
+def test_keep_partial_writes_nothing_if_every_chunk_fails(examples, console):
+    backend = FakeBackend()
+    backend.handler = failing_pages(backend, {0, 1, 2})
+    summary = run([examples / "alice_in_wonderland_sample.pdf"], console, backend, keep_partial=True)
+    assert summary.exit_code == 1
+    assert not (examples / "alice_in_wonderland_sample.md").exists()
+
+
+def test_keep_partial_needs_markdown_or_html(tmp_path):
+    with pytest.raises(ConfigurationError, match="--keep-partial"):
+        Config(inputs=[tmp_path], api_key="k", output_format="json", keep_partial=True).validate()
 
 
 def test_one_failed_chunk_fails_the_file_without_partial_output(examples, console):
@@ -213,8 +262,8 @@ def test_dry_run_needs_no_backend(examples, console):
     summary = Pipeline(config, console).run(jobs)
     assert summary.exit_code == 0
     assert "alice_in_wonderland_sample.pdf → " in console.err
-    assert "(3 pages, 2 chunks)" in console.err
-    assert "(1 page, 1 chunk)" in console.err
+    assert "(3 pages, 2 chunks, ~$0.012)" in console.err  # Datalab fast at $4 per 1,000 pages
+    assert "(1 page, 1 chunk, ~$0.004)" in console.err
     assert not list(examples.glob("*.md"))
 
 

@@ -118,6 +118,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="do not join hard-wrapped paragraph lines in Markdown output",
     )
+    out.add_argument(
+        "--keep-partial",
+        action="store_true",
+        help="if some pages of a file fail, write the rest with a comment in place of each failed page"
+        " (the run still exits with status 1)",
+    )
+    out.add_argument(
+        "--keep-superscripts",
+        dest="normalize_superscripts",
+        action="store_false",
+        help="keep Unicode (¹, ᵃ) and LaTeX ($^{a}$) superscripts instead of writing <sup> in Markdown",
+    )
 
     conv = parser.add_argument_group("conversion")
     conv.add_argument(
@@ -139,6 +151,12 @@ def build_parser() -> argparse.ArgumentParser:
         f"{MistralBackend.info.default_model} for Mistral, {OpenAIBackend.info.default_model} for OpenAI)",
     )
     conv.add_argument("--paginate", action="store_true", help="insert page separators in the output")
+    conv.add_argument(
+        "--split-spreads",
+        action="store_true",
+        help="send each half of a landscape PDF page (a scan of two facing pages) separately,"
+        " then join them (not available on Datalab)",
+    )
     conv.add_argument(
         "--no-images", dest="disable_image_extraction", action="store_true", help="do not extract images"
     )
@@ -256,6 +274,9 @@ def config_from_args(args: argparse.Namespace, console: Console) -> Config:
         overwrite=args.overwrite,
         dry_run=args.dry_run,
         reflow_markdown=args.reflow_markdown,
+        normalize_superscripts=args.normalize_superscripts,
+        keep_partial=args.keep_partial,
+        split_spreads=args.split_spreads,
         extra_options=dict(args.api_options),
     ).validate()
 
@@ -263,7 +284,14 @@ def config_from_args(args: argparse.Namespace, console: Console) -> Config:
 def _print_summary(console: Console, summary, dry_run: bool) -> None:
     converted, skipped, failed = (summary.count(s) for s in (CONVERTED, SKIPPED, FAILED))
     if dry_run:
-        console.info(f"Dry run: {converted} to convert, {skipped} skipped, {failed} failed")
+        line = f"Dry run: {converted} to convert, {skipped} skipped, {failed} failed"
+        if summary.pages:
+            line += f" · {summary.pages} pages"
+        if converted > summary.unestimated:
+            line += f" · estimated {format_cost(summary.cost_cents)} at list price"
+            if summary.unestimated:
+                line += f" (excluding {summary.unestimated} file{'s' * (summary.unestimated != 1)})"
+        console.info(line)
         return
     if len(summary.results) <= 1 and not skipped:
         return

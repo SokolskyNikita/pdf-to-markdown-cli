@@ -3,7 +3,7 @@
 Skipped by default. Run them with a key when changing anything that affects
 conversion output:
 
-    DATALAB_API_KEY=... pytest -m live
+    DATALAB_API_KEY=... pytest -m live -n 8
 
 A full run converts about 25 pages (a few cents).
 """

@@ -16,7 +16,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from docs_to_md.assemble import ChunkOutput, assemble, write_document
+from docs_to_md.assemble import ChunkOutput, assemble, failed_pages, write_document
+from docs_to_md.backends import get_backend
 from docs_to_md.backends.base import Backend
 from docs_to_md.config import Config
 from docs_to_md.console import Console, format_cost
@@ -42,6 +43,7 @@ class FileResult:
 class RunSummary:
     results: list[FileResult] = field(default_factory=list)
     elapsed: float = 0.0
+    unestimated: int = 0  # dry runs: files to convert whose cost can't be estimated
 
     def count(self, status: str) -> int:
         return sum(1 for r in self.results if r.status == status)
@@ -89,8 +91,11 @@ class Pipeline:
         return None
 
     def _dry_run(self, jobs: Sequence[Job], summary: RunSummary) -> RunSummary:
+        backend_type = get_backend(self.config.backend)
         for job in jobs:
             detail = ""
+            pages = 0
+            estimate = None
             if job.is_pdf:
                 try:
                     pages = len(
@@ -102,9 +107,13 @@ class Pipeline:
                     continue
                 size = self.config.chunk_size or pages or 1
                 chunks = max(1, -(-pages // size))
-                detail = f" ({pages} page{'s' * (pages != 1)}, {chunks} chunk{'s' * (chunks != 1)})"
+                estimate = backend_type.estimate_cents(self.config, pages)
+                cost = "" if estimate is None else f", ~{format_cost(estimate)}"
+                detail = f" ({pages} page{'s' * (pages != 1)}, {chunks} chunk{'s' * (chunks != 1)}{cost})"
+            if estimate is None:
+                summary.unestimated += 1
             self.console.info(f"would convert {job.label} → {display_path(job.output)}{detail}")
-            summary.results.append(FileResult(job, CONVERTED))
+            summary.results.append(FileResult(job, CONVERTED, pages=pages, cost_cents=estimate or 0.0))
         return summary
 
     # -- per-chunk work (runs in worker threads) --------------------------
@@ -127,7 +136,8 @@ class Pipeline:
             self.stop_event.set()
             raise
         except BaseException:
-            abort.set()  # don't keep spending credits on this file's other chunks
+            if not self.config.keep_partial:
+                abort.set()  # don't keep spending credits on this file's other chunks
             raise
         self.console.advance()
         return output
@@ -151,14 +161,38 @@ class Pipeline:
             raise FileError(f"file is larger than {info.label}'s {_format_size(limit)} upload limit")
         return [Chunk(path=job.source)]
 
-    def _finish(self, job: Job, futures: list[Future], abort: threading.Event) -> FileResult:
+    def _outputs(
+        self, chunks: list[Chunk], futures: list[Future]
+    ) -> tuple[list[ChunkOutput], list[tuple[Chunk, DocsToMdError]]]:
+        """Each chunk's output, and the failures that --keep-partial replaced with placeholders."""
+        if not self.config.keep_partial:
+            return [future.result() for future in futures], []
+        outputs: list[ChunkOutput] = []
+        failures: list[tuple[Chunk, DocsToMdError]] = []
+        for chunk, future in zip(chunks, futures, strict=True):
+            try:
+                outputs.append(future.result())
+            except (FatalAPIError, Cancelled):
+                raise
+            except DocsToMdError as e:
+                failures.append((chunk, e))
+                config = self.config
+                outputs.append(failed_pages(chunk.pages, str(e), config.output_format, config.paginate))
+        if len(failures) == len(futures):
+            raise failures[0][1]  # nothing worth keeping
+        return outputs, failures
+
+    def _finish(
+        self, job: Job, chunks: list[Chunk], futures: list[Future], abort: threading.Event
+    ) -> FileResult:
         try:
-            outputs = [future.result() for future in futures]
+            outputs, failures = self._outputs(chunks, futures)
             doc = assemble(
                 outputs,
                 self.config.output_format,
                 job.images_dir.name,
                 reflow_markdown=self.config.reflow_markdown,
+                superscripts=self.config.normalize_superscripts,
             )
             write_document(doc, job.output, job.images_dir)
         except FatalAPIError:
@@ -182,6 +216,13 @@ class Pipeline:
         if cost:
             details.append(format_cost(cost))
         suffix = f" ({', '.join(details)})" if details else ""
+        if failures:
+            failed = sum(len(chunk.pages) for chunk, _ in failures)
+            message = f"{failed} page{'s' * (failed != 1)} failed: {failures[0][1]}"
+            self.console.failure(
+                f"{job.label} → {display_path(job.output)}{suffix}; {message} (marked in the output)"
+            )
+            return FileResult(job, FAILED, message, pages=pages, cost_cents=cost)
         self.console.success(f"{job.label} → {display_path(job.output)}{suffix}")
         self.console.result_path(str(job.output))
         return FileResult(job, CONVERTED, pages=pages, cost_cents=cost)
@@ -222,13 +263,13 @@ class Pipeline:
                         continue
                     abort = threading.Event()
                     futures = [pool.submit(self._convert_chunk, c, abort) for c in chunks]
-                    scheduled.append((job, futures, abort))
+                    scheduled.append((job, chunks, futures, abort))
                     total_chunks += len(chunks)
 
                 self.console.start_progress(total_chunks, "Converting")
                 try:
-                    for job, futures, abort in scheduled:
-                        summary.results.append(self._finish(job, futures, abort))
+                    for job, chunks, futures, abort in scheduled:
+                        summary.results.append(self._finish(job, chunks, futures, abort))
                 finally:
                     self.console.stop_progress()
         except BaseException as e:

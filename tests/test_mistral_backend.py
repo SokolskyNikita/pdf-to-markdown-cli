@@ -10,6 +10,7 @@ import base64
 import re
 import threading
 
+import pikepdf
 import pytest
 
 from docs_to_md.backends import get_backend
@@ -31,8 +32,8 @@ from .conftest import PNG_B64, PNG_BYTES
 MARKER = re.compile(r"^\{(\d+)\}-{48}$", re.MULTILINE)
 
 
-def page(index, markdown, images=(), tables=()):
-    return {"index": index, "markdown": markdown, "images": list(images), "tables": list(tables)}
+def page(index, markdown, images=(), tables=(), **fields):
+    return {"index": index, "markdown": markdown, "images": list(images), "tables": list(tables), **fields}
 
 
 def image(name, data=f"data:image/png;base64,{PNG_B64}"):
@@ -170,6 +171,21 @@ def test_whole_documents_get_page_selection(tmp_path, console):
     assert MARKER.findall((tmp_path / "notes.md").read_text()) == ["1", "3"]
 
 
+def test_split_spreads_sends_each_half_as_a_page(tmp_path, console):
+    with pikepdf.new() as pdf:
+        pdf.add_blank_page(page_size=(1000, 700))  # a two-page scan
+        pdf.add_blank_page(page_size=(500, 700))
+        pdf.save(tmp_path / "book.pdf")
+    summary, client = run([tmp_path], console, paginate=True, split_spreads=True)
+    assert summary.exit_code == 0
+    (body,) = client.bodies
+    assert page_count(body) == 3
+    text = (tmp_path / "book.md").read_text()
+    assert [int(n) for n in MARKER.findall(text)] == [0, 1]
+    assert "page 0 of request 0\n\npage 1 of request 0" in text and "page 2 of request 0" in text
+    assert summary.pages == 2 and summary.cost_cents == pytest.approx(1.2)  # 3 halves billed
+
+
 def test_requested_pages():
     assert requested_pages(None, None) is None
     assert requested_pages(None, 3) == [0, 1, 2]
@@ -257,6 +273,45 @@ def test_separate_tables_are_put_back_inline():
     assert result.pages == ["# Title\n\n<table><tr><td>\\alpha</td></tr></table>\n\nNote"]
 
 
+def test_footnotes_in_the_footer_are_kept():
+    # OCR 4.0 with extract_footer on: footnotes come back in "footer" next to
+    # the page number, and the running title repeats on every page.
+    pages = [
+        page(
+            0,
+            "# Carta do Bispo\n\nO caso de Fátima^{1} é conhecido.",
+            header="Documentação Crítica de Fátima",
+            footer="$^{1}$ Cf. Doc. 20, de 1 de Setembro de 1917.\n\nDa criação da capelania - 5\n\n12",
+        ),
+        page(
+            1,
+            "Continua o texto.",
+            footer="Da criação da capelania - 5\n\n- 13 -\n\n1 Ibidem.\n2 Cf. DCF, vol. 3, 2, Doc. 475.",
+        ),
+        page(2, "Sem notas.", footer="xiv"),
+        page(3, "", footer="1 Ibidem."),
+        # A two-page spread: the left page's notes sit in the header between the running heads.
+        page(
+            4,
+            "Left text. Right text.",
+            header="404^{}[] *Das aparições - 3*\n$^{1}$ Cf. *DCF*, vol. 3.\n<sup>2</sup> Este artigo.\n"
+            "¹ Ver acima.\n(4) Cf. t. 2.º\n14. La maréchale.\nDoc. 777 1922-04-23\n405",
+            footer="$^{1}$ D. José tinha já convidado.",
+        ),
+    ]
+    result = parse_response(payload(pages), "mistral-ocr-4-0", include_images=True)
+    assert result.pages == [
+        "# Carta do Bispo\n\nO caso de Fátima^{1} é conhecido.\n\n"
+        "$^{1}$ Cf. Doc. 20, de 1 de Setembro de 1917.",
+        "Continua o texto.\n\n1 Ibidem.\n2 Cf. DCF, vol. 3, 2, Doc. 475.",
+        "Sem notas.",
+        "1 Ibidem.",  # repeats, but a footnote is never a running footer
+        "Left text. Right text.\n\n$^{1}$ Cf. *DCF*, vol. 3.\n<sup>2</sup> Este artigo.\n¹ Ver acima.\n"
+        "(4) Cf. t. 2.º\n14. La maréchale.\n"
+        "$^{1}$ D. José tinha já convidado.",
+    ]
+
+
 def test_pages_are_ordered_by_index():
     result = parse_response(payload([page(4, "b"), page(2, "a")]), "mistral-ocr-4-0", include_images=True)
     assert (result.pages, result.indexes) == (["a", "b"], [2, 4])
@@ -274,7 +329,7 @@ def test_bad_responses_are_errors(data, message):
 def test_cost_is_reported(examples, console):
     summary, _ = run([examples / "alice_in_wonderland_sample.pdf"], console)
     assert summary.cost_cents == pytest.approx(1.2)  # 3 pages at $4 per 1,000
-    assert "3 pages, $0.01)" in console.err
+    assert "3 pages, $0.012)" in console.err
 
 
 def test_cost_cents():

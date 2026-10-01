@@ -48,6 +48,7 @@ def test_defaults(tmp_path, monkeypatch):
     assert config.chunk_size == 25
     assert config.mode is None
     assert config.reflow_markdown is True
+    assert config.normalize_superscripts is True and config.keep_partial is False
     assert console.err == ""
 
 
@@ -85,6 +86,8 @@ def test_all_options(tmp_path):
         "out",
         "--overwrite",
         "--keep-line-breaks",
+        "--keep-superscripts",
+        "--keep-partial",
         "-m",
         "balanced",
         "--paginate",
@@ -106,6 +109,7 @@ def test_all_options(tmp_path):
     )
     assert config.output_dir.is_absolute() and config.output_dir.name == "out"
     assert config.overwrite and not config.reflow_markdown
+    assert not config.normalize_superscripts and config.keep_partial
     assert config.mode == "balanced"
     assert config.paginate and config.disable_image_extraction and config.disable_image_captions
     assert config.skip_cache
@@ -131,9 +135,10 @@ def test_llm_backends(tmp_path, monkeypatch):
     assert (config.backend, config.api_key, config.chunk_size, config.model) == (
         "openai",
         "sk-openai",
-        5,
+        1,
         None,
     )
+    assert parse(str(tmp_path), "--backend", "openai", "--split-spreads")[0].split_spreads
     config, _ = parse(
         str(tmp_path), "--backend", "openrouter", "--model", "gpt-5.6-luna", "--chunk-size", "2"
     )
@@ -272,6 +277,36 @@ def test_version(capsys):
         cli.main(["--version"])
     assert exc.value.code == 0
     assert capsys.readouterr().out.strip() == f"pdf-to-md {__version__}"
+
+
+@pytest.mark.parametrize(
+    ("argv", "total"),
+    [
+        ([], "$0.016"),  # Datalab fast: 4 pages at $4 per 1,000
+        (["-m", "accurate"], "$0.040"),  # $10 per 1,000
+        (["--backend", "mistral"], "$0.016"),
+        (["--backend", "mistral", "--model", "mistral-ocr-2512"], "$0.008"),
+        (["--backend", "openai"], "$0.003"),  # rough: 0.08 cents per page
+        (["--backend", "openrouter", "--api-option", "service_tier=flex"], "$0.002"),
+    ],
+)
+def test_dry_run_estimates_cost(examples, argv, total):
+    console = CapturingConsole()
+    assert cli.main([str(examples), "-n", *argv], console=console) == cli.EXIT_OK
+    assert (
+        f"Dry run: 2 to convert, 0 skipped, 0 failed · 4 pages · estimated {total} at list price"
+        in console.err
+    )
+
+
+def test_dry_run_estimate_leaves_out_unknown_files(examples):
+    (examples / "notes.docx").write_bytes(b"docx")
+    console = CapturingConsole()
+    assert cli.main([str(examples), "-n", "--model", "x", "--backend", "mistral"], console=console) == 0
+    assert "estimated" not in console.err  # no price for model x
+    console = CapturingConsole()
+    assert cli.main([str(examples), "-n"], console=console) == 0
+    assert "estimated $0.016 at list price (excluding 1 file)" in console.err
 
 
 def test_main_converts_and_prints_paths(examples, fake_client, monkeypatch):

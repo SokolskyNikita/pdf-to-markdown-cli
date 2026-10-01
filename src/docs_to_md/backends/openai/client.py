@@ -32,6 +32,11 @@ QUOTA_ERROR_CODES = {
     "project_spend_limit_exceeded",
     "organization_usage_limit_exceeded",
 }
+# A response can also come back with status "failed". These error codes mean
+# the request itself is bad (e.g. invalid_image); other failures, such as
+# server_error or OpenRouter's "Stream ended before a terminal response event",
+# are retried.
+PERMANENT_FAILURE_PREFIXES = ("invalid_", "image_", "unsupported_", "empty_", "failed_to_download")
 
 
 def _error(response: requests.Response) -> tuple[str, str]:
@@ -101,6 +106,12 @@ class OpenAIClient:
                 raise RetryableAPIError(f"{what}: invalid JSON in response ({e})", status) from e
             if not isinstance(data, dict):
                 raise RetryableAPIError(f"{what}: unexpected response payload", status)
+            if data.get("status") == "failed":
+                error = data.get("error") if isinstance(data.get("error"), dict) else {}
+                code = str(error.get("code") or "")
+                if not code.startswith(PERMANENT_FAILURE_PREFIXES):
+                    message = error.get("message") or "no details"
+                    raise RetryableAPIError(f"{what}: response failed: {message}", status)
             return data
         message, code = _error(response)
         detail = f"HTTP {status}: {message}".rstrip(": ")

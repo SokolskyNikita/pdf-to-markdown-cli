@@ -8,6 +8,30 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-01
+
+### Added
+
+- `--dry-run` estimates each file's cost and the total at list price: Datalab $4 per 1,000 pages for `fast` and `balanced` and $10 for `accurate`, Mistral's per-page price, and a rough per-page figure for GPT-Luna.
+- `--keep-partial` writes a file even if some of its chunks fail, with `<!-- pdf-to-md: page N failed: ... -->` in place of each missing page. The run still exits with status 1.
+- `--keep-superscripts` turns off the superscript normalization below.
+- `--split-spreads` (Mistral, OpenAI and OpenRouter): each landscape PDF page, such as a scan of two facing book pages, is sent as its left and right halves (one request per half for GPT-Luna) and the transcriptions are joined. Split pages lose their invisible OCR text layer, which would otherwise give each half the whole spread's text. On the scanned-book benchmark it stopped GPT-Luna from dropping half a spread and put every left-page footnote in order for all backends.
+- A scanned-book benchmark in `benchmarks/scanned_books/`: 16 public-domain pages (Vieira's letters as two-page spreads, Multatuli's and Mme de Sévigné's letters) with reference transcriptions, a scorer for word accuracy, footnotes, printed spellings and footnote order, a runner, and baselines for every backend and mode. `tests/test_benchmark.py` checks it offline (`rapidfuzz` is now a test dependency).
+
+### Changed
+
+- Markdown superscripts are written as `<sup>...</sup>` for every backend: Mistral's `$^{a}$` and Unicode such as `Ex.ᵐᵒ` and `¹` are converted. The ordinals `ª` and `º` are left alone.
+- GPT-Luna sends one page per request by default (`--chunk-size 1`, was 5). On scans of two facing book pages, 5-page requests came back with text shifted between pages, and single pages were faster at the same cost.
+- GPT-Luna's prompt treats a scan of two facing pages as one page and asks for printed spelling, misprints and editorial marks to be kept, and for superscripts as `<sup>`.
+- Costs are shown to the tenth of a cent below $1 (`$0.070`, `$0.008`) and to the cent above.
+- The live test suite runs in parallel (`pytest -m live -n 8`; `pytest-xdist` is now a test dependency): about 2 minutes instead of 17.
+
+### Fixed
+
+- Mistral OCR 4.x dropped footnotes, which it returns in the page footer (or, on two-page scans, the header, with markers such as `$^{1}$`, `(1)` or `14.`). They are now kept at the end of their page. Page numbers and repeated running footers are still left out.
+- GPT-Luna responses that come back with status "failed" for a server-side reason (e.g. OpenRouter's "Stream ended before a terminal response event") are retried like other transient errors.
+- GPT-Luna no longer fails a file when a single page comes back as two (the halves of a spread); they are joined. A multi-page chunk with the wrong page count after the retry is sent again page by page instead of failing.
+
 ## [1.4.0] - 2026-09-29
 
 ### Added

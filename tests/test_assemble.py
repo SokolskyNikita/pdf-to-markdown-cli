@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from docs_to_md.assemble import ChunkOutput, Document, assemble, write_document
+from docs_to_md.assemble import ChunkOutput, Document, assemble, failed_pages, write_document
 from docs_to_md.errors import ResultProcessingError
 
 from .conftest import PNG_B64, PNG_BYTES
@@ -192,3 +192,19 @@ def test_write_document_uses_unix_newlines(tmp_path):
     out = tmp_path / "a.md"
     write_document(Document(text="one\ntwo\n", images={}), out, tmp_path / "a_images")
     assert out.read_bytes() == b"one\ntwo\n"
+
+
+def test_markdown_superscripts_are_normalized_unless_disabled():
+    chunk = ChunkOutput(pages=[0], content="V. Ex.$^{a}$ e Rv.ᵐᵃ¹\n")
+    assert assemble([chunk], "markdown", "x_images").text == "V. Ex.<sup>a</sup> e Rv.<sup>ma1</sup>\n"
+    kept = assemble([chunk], "markdown", "x_images", superscripts=False)
+    assert kept.text == "V. Ex.$^{a}$ e Rv.ᵐᵃ¹\n"
+
+
+def test_failed_pages_comment_each_page():
+    chunk = failed_pages([3, 4], "HTTP 500 -- server\nerror", "markdown", paginate=True)
+    assert chunk.pages == [3, 4] and chunk.page_count == 0
+    assert chunk.content.count("<!-- pdf-to-md: page 3 failed: HTTP 500 - server error -->") == 1
+    assert "page 4 failed" in chunk.content
+    html = failed_pages([0], "boom", "html", paginate=False).content
+    assert '<div class="page" data-page-id="0">\n<!-- pdf-to-md: page 0 failed: boom -->' in html

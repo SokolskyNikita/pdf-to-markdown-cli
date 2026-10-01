@@ -2,7 +2,7 @@
 
 Skipped by default. Each backend runs when its key is set:
 
-    OPENAI_API_KEY=... OPENROUTER_API_KEY=... pytest -m live tests/test_live_llm.py
+    OPENAI_API_KEY=... OPENROUTER_API_KEY=... pytest -m live -n 8 tests/test_live_llm.py
 
 A full run transcribes every sample page once per backend (a few cents each).
 """

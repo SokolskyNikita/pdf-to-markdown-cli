@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import quote
 
 from docs_to_md.errors import ResultProcessingError
-from docs_to_md.markdown import normalize_line_breaks, remove_duplicate_captions
+from docs_to_md.markdown import normalize_line_breaks, normalize_superscripts, remove_duplicate_captions
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,13 @@ def join_pages(pages: list[str], output_format: str, paginate: bool) -> str:
     if paginate:
         return "".join(f"\n\n{{{i}}}{_MD_PAGE_DASHES}\n\n{page.strip()}" for i, page in enumerate(pages))
     return "\n\n".join(page.strip() for page in pages if page.strip())
+
+
+def failed_pages(pages: Sequence[int], reason: str, output_format: str, paginate: bool) -> ChunkOutput:
+    """A stand-in for pages whose conversion failed (``--keep-partial``): a comment per page."""
+    reason = re.sub(r"-{2,}", "-", " ".join(reason.split()))  # "--" would end the comment
+    texts = [f"<!-- pdf-to-md: page {page} failed: {reason} -->" for page in pages]
+    return ChunkOutput(pages=pages, content=join_pages(texts, output_format, paginate))
 
 
 @dataclass
@@ -169,6 +176,7 @@ def assemble(
     output_format: str,
     images_dir_name: str,
     reflow_markdown: bool = True,
+    superscripts: bool = True,
 ) -> Document:
     """Merge chunk outputs in order, renaming images and renumbering pages."""
     if not chunks:
@@ -195,6 +203,8 @@ def assemble(
         page = _page_mapper(chunk.pages)
         if output_format == "markdown":
             text = remove_duplicate_captions(_rewrite_markdown(chunk.content, refs, page))
+            if superscripts:
+                text = normalize_superscripts(text)
             if reflow_markdown:
                 text = normalize_line_breaks(text)
             parts.append(text.strip("\n"))

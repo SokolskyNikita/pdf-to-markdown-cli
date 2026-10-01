@@ -9,6 +9,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 MODES = ("fast", "balanced", "accurate")
+DEFAULT_MODE = "fast"  # what the API uses when no mode is sent
+# US dollars per 1,000 pages by mode, for dry-run estimates. Actual charges come
+# from the API's cost_breakdown. https://www.datalab.to/pricing
+PRICES: dict[str, float] = {"fast": 4.0, "balanced": 4.0, "accurate": 10.0}
 OUTPUT_FORMATS = frozenset({"markdown", "html", "json"})
 
 # Input extension (without dot) -> MIME type sent to the API.
