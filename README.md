@@ -1,10 +1,37 @@
-# pdf-to-md
+<h1 align="center">pdf-to-md</h1>
 
-`pdf-to-md` converts PDFs, scanned books, Office documents and images to Markdown, HTML or JSON. It accepts individual files or whole folders and uses Datalab by default. Mistral OCR and OpenAI's GPT-Luna are also supported.
+<p align="center">
+  <strong>Turn PDFs, scans, and Office documents into clean Markdown with one command, even 1,000-page books.</strong>
+</p>
 
-[![PyPI](https://img.shields.io/pypi/v/pdf-to-markdown-cli.svg)](https://pypi.org/project/pdf-to-markdown-cli/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://pypi.org/project/pdf-to-markdown-cli/)
-[![CI](https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml)
+<p align="center">
+  <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/pypi/v/pdf-to-markdown-cli.svg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/pdf-to-markdown-cli/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
+  <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml"><img src="https://github.com/SokolskyNikita/pdf-to-markdown-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/releases"><img src="https://img.shields.io/github/v/release/SokolskyNikita/pdf-to-markdown-cli" alt="GitHub release"></a>
+  <a href="https://github.com/SokolskyNikita/pdf-to-markdown-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+</p>
+
+`pdf-to-md` is a command-line tool that converts documents to Markdown, HTML, or JSON with the [Datalab](https://www.datalab.to/) Convert API, the hosted version of the open-source [Marker](https://github.com/datalab-to/marker) engine. It can also read PDFs, Office files, and images with [Mistral OCR](#mistral-ocr), or transcribe PDFs and images with OpenAI's GPT-Luna, called [directly or through OpenRouter](#gpt-luna). It handles the tedious parts for you: splitting big PDFs, uploading in parallel, retrying, stitching the results back together, and fixing page numbers and image links.
+
+```console
+$ pdf-to-md books/
+✓ darwin.pdf → darwin.md (516 pages, $1.55)
+✓ tolstoy.pdf → tolstoy.md (537 pages, $1.61)
+✓ grimm.pdf → grimm.md (510 pages, $1.53)
+Done in 4m37s: 3 converted · 1563 pages · $4.69
+```
+
+<sub>Output from a real run (file names shortened): three scanned 19th-century books in English, Russian, and German Fraktur.</sub>
+
+## Why pdf-to-md
+
+- **Built for big documents.** PDFs are split into page chunks that convert in parallel and are merged back into a single file. Page separators, anchors, and image links stay correct across chunks.
+- **Safe to re-run.** Output names are deterministic (`report.pdf` → `report.md`) and finished files are skipped. Re-running on a folder converts only what's new or failed, so you never pay twice by accident.
+- **Honest about results.** Every file reports its pages and cost. The exit code says whether anything failed. A bad API key stops the run immediately instead of failing file by file.
+- **Resilient.** Rate limits, server errors, and dropped connections are retried with backoff. Ctrl-C stops cleanly without leaving half-written files.
+- **Made for scripting.** Converted paths go to stdout, progress and errors to stderr, so it drops straight into pipelines and CI jobs.
+- **Any language, any era.** Tested on modern PDFs, math, statistical tables from a faded microfiche, and scans of Cyrillic, blackletter German, vertical classical Chinese, Arabic, Hebrew, polytonic Greek, Devanagari, and 1687 Latin ([samples](#sample-conversions)).
 
 ## Installation
 
