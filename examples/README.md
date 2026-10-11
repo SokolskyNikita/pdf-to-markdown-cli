@@ -34,6 +34,12 @@ The Darwin, Tolstoy, Grimm, Shijing, Lane, Gesenius, Loeb *Odyssey*, Besant *Git
 
 1. Put a short excerpt (one to three pages) of a public-domain document here, taken from a legitimate source such as the Internet Archive, and record the source in the table above. It should exercise something the other samples don't.
 2. Generate its output: `pdf-to-md examples`, adding `--mode` if the sample needs it. Existing outputs are skipped, so only the new file is converted.
-3. Add an entry to `tests/samples.py` and a row to the tables here and in the main README.
+3. Add an entry to `tests/samples.py` and a row to the table here. The main README keeps a selection of examples.
 
-To refresh every output after a change in conversion behavior, run `pdf-to-md examples --overwrite` and review the diff.
+To refresh outputs after a change in conversion behavior, convert each PDF separately with `--backend datalab --overwrite`. Add `--mode` when its entry in `tests/samples.py` sets one, then review the diff. A directory run applies the same mode to every file and would lose the `accurate` setting for the 1880 census and Lane lexicon. For example:
+
+```bash
+pdf-to-md examples/alice_in_wonderland_sample.pdf --backend datalab --overwrite
+pdf-to-md examples/census_1880_tables_en.pdf --backend datalab --mode accurate --overwrite
+pdf-to-md examples/lane_arabic_english_lexicon_ar.pdf --backend datalab --mode accurate --overwrite
+```

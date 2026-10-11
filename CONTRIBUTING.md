@@ -59,6 +59,8 @@ python benchmarks/scanned_books/run.py --backend mistral   # real API, a few cen
 
 ## Project layout
 
+See [HOW-IT-WORKS.md](HOW-IT-WORKS.md) for the conversion pipeline, backend behavior, and implementation decisions.
+
 ```text
 src/docs_to_md/
 ├── cli.py        arguments, entry point, exit codes, summary
