@@ -19,9 +19,8 @@ from docs_to_md.backends.base import parse_option_value
 from docs_to_md.errors import APIError
 from docs_to_md.pdf import select_pages
 
-# OCR 4.0 read our samples best: OCR 4.1 (mistral-ocr-latest) dropped a table
-# row and writes math as \( \) instead of $.
-DEFAULT_MODEL = "mistral-ocr-4-0"
+# Mistral's newest OCR model, OCR 4.1 as of October 2026.
+DEFAULT_MODEL = "mistral-ocr-latest"
 OUTPUT_FORMATS = frozenset({"markdown"})
 
 # Input extension (without dot) -> MIME type. Images are sent as image_url,
@@ -53,7 +52,7 @@ INPUT_MIME_TYPES: dict[str, str] = {**DOCUMENT_MIME_TYPES, **IMAGE_MIME_TYPES}
 
 # US dollars per 1,000 pages, by model name and alias.
 PRICES: dict[str, float] = {
-    **dict.fromkeys(("mistral-ocr-4-0", "mistral-ocr-4-1", "mistral-ocr-4", "mistral-ocr-latest"), 4.0),
+    **dict.fromkeys(("mistral-ocr-latest", "mistral-ocr-4-1", "mistral-ocr-4"), 4.0),
     **dict.fromkeys(("mistral-ocr-2512", "mistral-ocr-3", "mistral-ocr-3-0"), 2.0),
 }
 # OCR 3 misplaces body text when headers and footers are split out (all of a
@@ -142,7 +141,7 @@ def _footer_key(line: str) -> str:
 def _notes(pages: list[dict[str, Any]]) -> list[str]:
     """The footnotes Mistral split out of each page's text.
 
-    With header and footer extraction on, OCR 4.x puts footnotes in the footer
+    With header and footer extraction on, OCR 4.1 puts footnotes in the footer
     along with the page number, so the footer is kept minus page numbers and
     running footers (lines that repeat on another page and aren't footnotes).
     On a scan of two facing pages, the left page's footnotes can land in the

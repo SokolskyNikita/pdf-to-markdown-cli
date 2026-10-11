@@ -7,7 +7,7 @@ from docs_to_md.errors import APIError, FatalAPIError, RetryableAPIError
 
 from .conftest import FakeResponse, FakeSession
 
-BODY = {"model": "mistral-ocr-4-0", "document": {}}
+BODY = {"model": "mistral-ocr-latest", "document": {}}
 
 
 def make_client(*responses):

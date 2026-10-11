@@ -40,7 +40,7 @@ def image(name, data=f"data:image/png;base64,{PNG_B64}"):
     return {"id": name, "image_base64": data}
 
 
-def payload(pages, model="mistral-ocr-4-0", processed=None):
+def payload(pages, model="mistral-ocr-latest", processed=None):
     return {
         "pages": pages,
         "model": model,
@@ -103,7 +103,7 @@ def test_info_describes_the_ocr_api():
     assert info.output_formats == {"markdown"}
     assert info.modes == ()
     assert (info.max_upload_bytes, info.chunk_size) == (50 * 1024 * 1024, 25)
-    assert (info.default_model, info.api_key_env_vars) == ("mistral-ocr-4-0", ("MISTRAL_API_KEY",))
+    assert (info.default_model, info.api_key_env_vars) == ("mistral-ocr-latest", ("MISTRAL_API_KEY",))
 
 
 def test_config_is_checked_against_the_backend(tmp_path):
@@ -136,7 +136,7 @@ def test_pdf_chunks_are_sent_as_documents(examples, console):
     document = first["document"]
     assert document["type"] == "document_url"
     assert document["document_url"].startswith("data:application/pdf;base64,")
-    assert (first["model"], first["include_image_base64"]) == ("mistral-ocr-4-0", True)
+    assert (first["model"], first["include_image_base64"]) == ("mistral-ocr-latest", True)
     assert first["extract_header"] is True and first["extract_footer"] is True
     assert "pages" not in first  # the split PDF holds only the selected pages
     assert sorted(page_count(body) for body in client.bodies) == [1, 2]
@@ -197,12 +197,12 @@ def test_options_shape_the_request(examples, console):
     _, client = run(
         [examples / "equations.pdf"],
         console,
-        model="mistral-ocr-latest",
+        model="mistral-ocr-4-1",
         disable_image_extraction=True,
         extra_options={"table_format": "html", "extract_footer": "false", "image_limit": "3"},
     )
     (body,) = client.bodies
-    assert body["model"] == "mistral-ocr-latest"
+    assert body["model"] == "mistral-ocr-4-1"
     assert body["include_image_base64"] is False
     assert (body["table_format"], body["image_limit"]) == ("html", 3)  # JSON values are decoded
     assert (body["extract_header"], body["extract_footer"]) == (True, False)  # and override defaults
@@ -219,7 +219,7 @@ def test_unsupported_file_types_are_rejected_locally(tmp_path):
     path = tmp_path / "notes.txt"
     path.write_bytes(b"x")
     with pytest.raises(APIError, match="Unsupported file type"):
-        OCRRequest("mistral-ocr-4-0").body(path)
+        OCRRequest("mistral-ocr-latest").body(path)
 
 
 # -- responses -----------------------------------------------------------------
@@ -267,14 +267,14 @@ def test_separate_tables_are_put_back_inline():
     table = {"id": "tbl-0.html", "content": "<table><tr><td>\\alpha</td></tr></table>", "format": "html"}
     result = parse_response(
         payload([page(0, "# Title\n\n[tbl-0.html](tbl-0.html)\n\nNote", tables=[table])]),
-        "mistral-ocr-4-0",
+        "mistral-ocr-latest",
         include_images=True,
     )
     assert result.pages == ["# Title\n\n<table><tr><td>\\alpha</td></tr></table>\n\nNote"]
 
 
 def test_footnotes_in_the_footer_are_kept():
-    # OCR 4.0 with extract_footer on: footnotes come back in "footer" next to
+    # OCR 4.1 with extract_footer on: footnotes come back in "footer" next to
     # the page number, and the running title repeats on every page.
     pages = [
         page(
@@ -299,7 +299,7 @@ def test_footnotes_in_the_footer_are_kept():
             footer="$^{1}$ D. José tinha já convidado.",
         ),
     ]
-    result = parse_response(payload(pages), "mistral-ocr-4-0", include_images=True)
+    result = parse_response(payload(pages), "mistral-ocr-latest", include_images=True)
     assert result.pages == [
         "# Carta do Bispo\n\nO caso de Fátima^{1} é conhecido.\n\n"
         "$^{1}$ Cf. Doc. 20, de 1 de Setembro de 1917.",
@@ -313,7 +313,7 @@ def test_footnotes_in_the_footer_are_kept():
 
 
 def test_pages_are_ordered_by_index():
-    result = parse_response(payload([page(4, "b"), page(2, "a")]), "mistral-ocr-4-0", include_images=True)
+    result = parse_response(payload([page(4, "b"), page(2, "a")]), "mistral-ocr-latest", include_images=True)
     assert (result.pages, result.indexes) == (["a", "b"], [2, 4])
 
 
@@ -323,7 +323,7 @@ def test_pages_are_ordered_by_index():
 )
 def test_bad_responses_are_errors(data, message):
     with pytest.raises(APIError, match=message):
-        parse_response(data, "mistral-ocr-4-0", include_images=True)
+        parse_response(data, "mistral-ocr-latest", include_images=True)
 
 
 def test_cost_is_reported(examples, console):
@@ -333,7 +333,7 @@ def test_cost_is_reported(examples, console):
 
 
 def test_cost_cents():
-    assert cost_cents("mistral-ocr-4-0", 1000) == pytest.approx(400)
+    assert cost_cents("mistral-ocr-4-1", 1000) == pytest.approx(400)
     assert cost_cents("mistral-ocr-latest", 10) == pytest.approx(4)
     assert cost_cents("mistral-ocr-2512", 10) == pytest.approx(2)
     assert cost_cents("some-other-model", 10) is None

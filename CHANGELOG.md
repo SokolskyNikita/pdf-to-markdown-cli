@@ -8,6 +8,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-11
+
+### Changed
+
+- The Mistral backend calls `mistral-ocr-latest` by default, which is OCR 4.1 as of October 2026 (was `mistral-ocr-4-0`, which Mistral deprecated on 29 September 2026). `mistral-ocr-latest` follows Mistral's newest OCR model; pass `--model mistral-ocr-4-1` to pin it. OCR 4.1 writes math as `\( \)` instead of `$`. The scanned-book baselines for Mistral are regenerated with it, and costs are no longer reported for `mistral-ocr-4-0`.
+
 ## [1.5.0] - 2026-10-01
 
 ### Added

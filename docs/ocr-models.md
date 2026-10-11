@@ -2,7 +2,7 @@
 
 This page collects what we learned in September 2026 about which models convert documents to Markdown best, and at what price. It covers the backends `pdf-to-md` supports today, then the remote APIs and local models that are candidates for future backends.
 
-Most of this was gathered on 29 September 2026; the scanned-book test ran on 30 September. Prices and scores move quickly, so re-check the sources before relying on a number.
+Most of this was gathered on 29 September 2026; the scanned-book test ran on 30 September. The Mistral OCR 4.1 results are from 11 October. Prices and scores move quickly, so re-check the sources before relying on a number.
 
 ## How to read the numbers
 
@@ -29,21 +29,21 @@ That's 16 pages with one run per model, so treat these results as a smoke test, 
 | Need | Use |
 |---|---|
 | Default, all input and output formats | Datalab (`fast`, or `accurate` for hard scans) |
-| Cheap and fast, with real image files | Mistral OCR 4.0 (`--backend mistral`) |
+| Cheap and fast, with real image files | Mistral OCR 4.1 (`--backend mistral`) |
 | Cheapest; strong on faded, number-heavy scans | GPT-6 Luna (`--backend openai` or `openrouter`) |
 | Best accuracy in our tests (not yet supported) | Gemini 3.8 Flash |
 | Local, no API key (not yet supported) | MinerU 4.0 |
 
 ## 1. Supported backends
 
-| | Datalab | Mistral OCR 4.0 | GPT-6 Luna |
+| | Datalab | Mistral OCR 4.1 | GPT-6 Luna |
 |---|---|---|---|
 | Flag | default | `--backend mistral` | `--backend openai` / `openrouter` |
 | $ / 1k pages | $4 fast and balanced, $10 accurate | $4 ($2 batch) | about $0.80 measured in the backend |
-| olmOCR-Bench | 86.7ˢ (the hosted API, probably accurate mode) | 85.2ˢ | not published |
-| ParseBench | 67.8 / 69.5 / 70.0 (fast / balanced / accurate) | 60.7 | 52.9 (no reasoning) to 65.8 (max) |
+| olmOCR-Bench | 86.7ˢ (the hosted API, probably accurate mode) | not published | not published |
+| ParseBench | 67.8 / 69.5 / 70.0 (fast / balanced / accurate) | not published | 52.9 (no reasoning) to 65.8 (max) |
 | Our keywords | 17/17 | 17/17 | 16/17\* |
-| Our 1880 / 1980 cells | 16/16 / 2/15 | 10/16 / 15/15 | 16/16 / 15/15 |
+| Our 1880 / 1980 cells | 16/16 / 2/15 | 9/16 / 14/15 | 16/16 / 15/15 |
 | Extracts images | yes | yes | no, describes figures in text |
 | Outputs | Markdown, HTML, JSON | Markdown | Markdown, HTML |
 
@@ -55,29 +55,28 @@ Datalab's modes all run its Chandra models: `fast` uses Chandra Small, `balanced
 
 - **Benchmarks:** Datalab reports 86.7 on olmOCR-Bench for its API without naming the mode; it's most likely `accurate`. Nanonets' leaderboard lists "Datalab Marker" at 83.2, also without a mode.
 - **Faded scans:** `fast` misread digits on the 1880 census microfiche, and `accurate` fixed them, so that sample uses `accurate`. Even so, a later MinerU comparison found three wrong digits in the committed 1880 output (Richland should be 1,264, Sikeston 191 and Dexter 2,809).
-- **Dense tables:** on the 15 hardest 1980 census cells, the committed output at the time got only 2 right; Mistral OCR 4.0 and every LLM tested got all 15.
+- **Dense tables:** on the 15 hardest 1980 census cells, the committed output at the time got only 2 right; every LLM tested got all 15, and Mistral OCR 4.1 got 14.
 - **Strengths:** the widest input and output support, real image files, and clean Chinese, Russian and Fraktur text. On Grimm's Fraktur it sometimes substitutes a plausible different word ("Lerche" became "Vögelchen").
 
 ### Mistral OCR
 
-We compared OCR 3, 4.0 and 4.1 on the samples, each with four output settings (96 requests, about $0.65). **OCR 4.0 is the best Mistral model and is the backend's default** (`mistral-ocr-4-0`).
+The backend calls `mistral-ocr-latest`, which points to OCR 4.1 as of October 2026. We compared it with OCR 3 on the samples through `pdf-to-md` on 11 October.
 
 | Model | Keywords | 1880 cells | 1980 cells | Chinese | Text | s / page | $ / 1k (batch) |
 |---|---|---|---|---|---|---|---|
-| **OCR 4.0** | 17/17 | 10/16 | **15/15** | 91.6 | 94.7 | ~1.8 | $4 ($2) |
-| OCR 4.1 | 17/17 | 10/16 | 14/15 | 91.4 | 93.6 | ~2 | $4 |
-| OCR 3 (`mistral-ocr-2512`) | 16/17 | 1/16 | 11/15 | 57.7 | 92.6 | ~4 | $2 ($1) |
+| **OCR 4.1** | 17/17 | 9/16 | 14/15 | 91.0 | 94.4 | ~2 | $4 ($2) |
+| OCR 3 (`mistral-ocr-2512`) | 16/17 | 1/16 | 11/15 | 59.7 | 92.6 | ~4 | $2 ($1) |
 
-- **OCR 4.x is a big step up from OCR 3:** all keywords found, the 1980 table nearly perfect, much better Chinese, 7 figures extracted instead of 4, and 2–3 times faster.
-- **OCR 4.1 isn't better than 4.0.** It dropped the Luxembourger row from the 1980 table and writes math as `\( … \)` and `\[ … \]` instead of `$`.
-- **The 1880 census is Mistral's weak spot.** OCR 4.x misread 6 of the 16 hard cells (for example 2,038 became 2,698) and dropped a couple of small rows.
-- **Output settings don't change accuracy.** `table_format` only changes where tables sit in the response. `extract_header` / `extract_footer` works on 4.x, but on OCR 3 it moved the whole Chinese page body into the header, so the backend leaves it off for OCR 3.
-- **Footnotes go to the footer.** With footer extraction on, OCR 4.x returns footnotes in the `footer` field next to the page number, and on two-page scans it sometimes puts the left page's footnotes in `header`. Up to 1.4.0 the backend dropped both, losing 26 of 49 footnotes in an earlier test of two-page scans. It now adds them back at the end of the page, minus page numbers and repeated running footers.
+- **OCR 4.1 is a big step up from OCR 3:** all keywords found, the 1980 table nearly perfect, much better Chinese, 9 figures extracted instead of 4, and about twice as fast.
+- **Small slips:** it spelled the Luxembourger row of the 1980 table "Luxemburger" (the numbers are right), and it writes math as `\( … \)` and `\[ … \]` instead of `$`.
+- **The 1880 census is Mistral's weak spot.** OCR 4.1 got 7 of the 16 hard cells wrong (for example 6,070 became 6,670) and dropped a small row.
+- **Output settings don't change accuracy.** `table_format` only changes where tables sit in the response. `extract_header` / `extract_footer` works on OCR 4.1, but on OCR 3 it moved the whole Chinese page body into the header, so the backend leaves it off for OCR 3.
+- **Footnotes go to the footer.** With footer extraction on, OCR 4.1 returns footnotes in the `footer` field next to the page number, and on two-page scans it sometimes puts the left page's footnotes in `header`. Up to 1.4.0 the backend dropped both, losing 26 of 49 footnotes in an earlier test of two-page scans. It now adds them back at the end of the page, minus page numbers and repeated running footers.
 - **Confidence scores can't flag bad pages.** The faded 1880 pages averaged 0.98, as high as clean prose, so "retry low-confidence pages elsewhere" wouldn't catch the digit errors.
-- **Public scores:** OCR 3 scores 81.7 on olmOCR-Bench in an independent run (79.1 without headers and footers). OCR 4.0's 85.2 and 93.07 on OmniDocBench are Mistral's own claims; independently it scores 78.2 on MDPBench (photographed and non-Latin pages) and 0.862 on PulseBench-Tab, the highest listed on that tables benchmark (run by Pulse, a competitor). OCR 4.1 has no published full-page scores.
+- **Public scores:** OCR 3 scores 81.7 on olmOCR-Bench in an independent run (79.1 without headers and footers). OCR 4.1 has no published full-page scores.
 - **Formats:** HTML, RTF and plain text come back as raw source, so the backend doesn't accept them.
 - OpenRouter's `mistral-ocr` PDF engine is OCR 3, with no version choice or output options.
-- Mistral's pricing page now lists OCR 4.1 at the same $4 per 1,000 pages. The backend still defaults to 4.0 for the reasons above.
+- **`mistral-ocr-latest` follows Mistral's newest OCR model.** A new release can change the output, and the price, without a `pdf-to-md` update; the cost `pdf-to-md` reports assumes $4 per 1,000 pages. Pass `--model mistral-ocr-4-1` to pin the version.
 
 ### GPT-6 Luna (OpenAI and OpenRouter)
 
@@ -101,7 +100,7 @@ GPT-5.6 Luna (`--model gpt-5.6-luna`) costs twice as much and scores 56.3–68.3
 - 5 pages of Multatuli's Dutch and French letters (1891), in his own spelling.
 - 3 pages of Mme de Sévigné's letters (1862), with 19 notes, plus IA's OCR as a text layer.
 
-The scorer measures word accuracy, footnotes found (47), 42 printed spellings and misprints that must survive verbatim, and 8 checks that a spread's left-page footnotes come before the right page's text. Results from 30 September 2026, at each backend's defaults:
+The scorer measures word accuracy, footnotes found (47), 42 printed spellings and misprints that must survive verbatim, and 8 checks that a spread's left-page footnotes come before the right page's text. Results from 30 September 2026 (Mistral from 11 October), at each backend's defaults:
 
 | Setting | Accuracy | Spelling | Order | Footnotes | $ for 16 pages |
 |---|---|---|---|---|---|
@@ -110,13 +109,13 @@ The scorer measures word accuracy, footnotes found (47), 42 printed spellings an
 | Datalab `fast` | 98.81% | 18/42 | 7/8 | 47 | 0.048 |
 | GPT-6 Luna `accurate` | 98.42% | 22/42 | 6/8 | 43 | 0.026 |
 | GPT-6 Luna `fast` | 98.37% | **26/42** | 3/8 | 47 | 0.013 |
-| Mistral OCR 4.0 | 97.93% | 18/42 | 3/8 | 47 | 0.064 |
+| Mistral OCR 4.1 | 98.13% | 23/42 | 3/8 | 47 | 0.064 |
 | GPT-6 Luna `balanced` | 94.79% | 23/42 | 4/8 | 45 | 0.016 |
 
 - **Datalab `accurate` is the most accurate** and keeps every footnote in place on two-page scans.
 - **No backend keeps printed spelling reliably.** The best kept 26 of 42. Datalab and Mistral modernise some words ("pretenção" to "pretensão", "plûtot" to "plutôt") and archaise others ("étaient" to "étoient"). GPT-Luna fixes misprints ("benegnidade", "Castslo") despite being told not to.
 - **GPT-Luna sometimes drops half of a spread.** In `balanced` mode it transcribed only the left page of the first spread, on both OpenAI and OpenRouter. That page ends mid-sentence just above its footnotes. It also tends to move left-page footnotes to the end of the scan. **`--split-spreads` fixes both:** it sends each half as its own page, and GPT-Luna then scored 98.5–98.8% with every left-page footnote in order (8/8), at the same cost.
-- **Mistral puts a spread's left-page footnotes in its `header` field**, and its right-page notes in `footer`. pdf-to-md adds both back at the end of the page, so they are kept but out of order. With `--split-spreads` Mistral scored 99.07% with every footnote in order, at 1.5 times the cost, because each half is billed as a page.
+- **Mistral puts a spread's left-page footnotes in its `header` field**, and its right-page notes in `footer`. pdf-to-md adds both back at the end of the page, so they are kept but out of order. With `--split-spreads` Mistral scored 98.86% with every footnote in order, at 1.5 times the cost, because each half is billed as a page.
 - **GPT-Luna `accurate` was no better than the other modes** and cost twice as much as `balanced`.
 - **Superscripts:** Datalab writes `<sup>`, Mistral LaTeX (`$^{a}$`), and GPT-Luna Unicode (`Ex.ᵐᵒ`, `¹`). pdf-to-md now writes `<sup>` for all of them.
 - **Two-page scans cost one page** on Datalab and Mistral, which bill per PDF page. `--paginate` numbers them as one page too.
@@ -230,7 +229,7 @@ Scores are from public benchmarks. "Blend" is the plain average of olmOCR-Bench 
 | What it measures | Best | Middle | Worst |
 |---|---|---|---|
 | Rewriting unclear words (FaithC4 rewrite rate, lower is better) | Gemini 3 Flash 0.0%, PaddleOCR-VL 1.5 7.9% | DeepSeek-OCR 2 13.5%, MinerU2.5-Pro 16.2%, GPT-5.4-mini 24.0% | LightOnOCR-2 53.7%, olmOCR 2 58.6% |
-| Photographed and non-Latin pages (MDPBench) | dots.mocr 80.5, Chandra 2 79.7 | PaddleOCR-VL 1.6 78.9, Mistral OCR 4 78.2 | Sonnet 4.6 73.1, GPT-5.2 68.6 |
+| Photographed and non-Latin pages (MDPBench) | dots.mocr 80.5, Chandra 2 79.7 | PaddleOCR-VL 1.6 78.9 | Sonnet 4.6 73.1, GPT-5.2 68.6 |
 | Tables (OmniDocBench v1.6 TEDS) | PaddleOCR-VL 1.6 94.8, MinerU2.5-Pro 93.4 | GLM-OCR 92.8, Gemini 3 Flash 89.3 | GPT-5.2 83.0, old Marker 65.8 |
 | Formulas (OmniDocBench v1.6 CDM) | PaddleOCR-VL 1.6 97.5, MinerU2.5-Pro 97.5 | GLM-OCR 97.2, Gemini 3 Pro 96.0 | GPT-5.2 88.2 |
 | Handwriting (METATR character error rate, lower is better) | Gemini 3 Pro 28.5%, Claude Opus 4.5 31.2% | Mistral OCR 43.6% | GPT-5.1 59.5%, olmOCR 2 95.3% |
@@ -246,15 +245,15 @@ Frontier LLMs lead on handwriting and faithfulness; small specialist models lead
 
 ## 5. Still unknown
 
-- Independent olmOCR-Bench scores for Mistral OCR 4.x and every current-generation LLM.
+- Independent olmOCR-Bench scores for Mistral OCR 4.1 and every current-generation LLM.
 - Mac speed and memory for Chandra 2, dots.mocr, olmOCR 2 and LightOnOCR-2.
 - How GPT-6 Luna counts image tokens (we assumed GPT-5.6's 1.2 multiplier on 32 px patches).
 - Accuracy on a larger set than our 16–25 sample pages. LLM output varies between runs.
 
 ## Sources
 
-- **Pricing:** [Datalab](https://www.datalab.to/pricing) · [Mistral](https://mistral.ai/pricing) · [Mistral OCR 4](https://mistral.ai/news/ocr-4/) · [Mistral OCR 4.1](https://docs.mistral.ai/models/ocr-4-1) · [OpenAI](https://developers.openai.com/api/docs/pricing) · [Gemini](https://ai.google.dev/gemini-api/docs/pricing) · [Claude](https://platform.claude.com/docs/en/about-claude/pricing) · [LlamaParse](https://developers.llamaindex.ai/python/cloud/general/pricing/) · [Reducto](https://reducto.ai/pricing) · [Unsiloed](https://www.unsiloed.ai/pricing)
+- **Pricing:** [Datalab](https://www.datalab.to/pricing) · [Mistral](https://mistral.ai/pricing) · [Mistral OCR 4.1](https://docs.mistral.ai/models/ocr-4-1) · [OpenAI](https://developers.openai.com/api/docs/pricing) · [Gemini](https://ai.google.dev/gemini-api/docs/pricing) · [Claude](https://platform.claude.com/docs/en/about-claude/pricing) · [LlamaParse](https://developers.llamaindex.ai/python/cloud/general/pricing/) · [Reducto](https://reducto.ai/pricing) · [Unsiloed](https://www.unsiloed.ai/pricing)
 - **Image tokens and speed:** [OpenAI vision guide](https://developers.openai.com/api/docs/guides/images-vision) · [Gemini media resolution](https://ai.google.dev/gemini-api/docs/media-resolution) · [Claude vision](https://platform.claude.com/docs/en/build-with-claude/vision) · [Artificial Analysis](https://artificialanalysis.ai/models/)
 - **Full-page benchmarks:** [olmOCR-Bench](https://github.com/allenai/olmocr) · [Nanonets leaderboard](https://benchmarking.nanonets.com/benchmarks/olmocr) · [ParseBench](https://github.com/run-llama/ParseBench/blob/main/leaderboard.csv) · [OmniDocBench](https://github.com/opendatalab/OmniDocBench) · [Datalab benchmarks](https://www.datalab.to/benchmarks) · [Unsiloed harness](https://github.com/Unsiloed-AI/unsiloed-olmocr-benchmark) · [LightOnOCR paper (Mistral OCR 3 score)](https://arxiv.org/html/2601.14251) · [Falcon Perception paper](https://arxiv.org/html/2603.27365)
-- **Specialty benchmarks:** [FaithC4, "Do VLMs Read or Rewrite?"](https://arxiv.org/html/2607.21617v2) · [MDPBench](https://github.com/Yuliang-Liu/MultimodalOCR/tree/main/MDPBench) · [METATR](https://arxiv.org/html/2605.26712v1) · [PulseBench-Tab](https://arxiv.org/html/2606.07534)
+- **Specialty benchmarks:** [FaithC4, "Do VLMs Read or Rewrite?"](https://arxiv.org/html/2607.21617v2) · [MDPBench](https://github.com/Yuliang-Liu/MultimodalOCR/tree/main/MDPBench) · [METATR](https://arxiv.org/html/2605.26712v1)
 - **Local models:** [Chandra](https://github.com/datalab-to/chandra) · [Marker](https://github.com/datalab-to/marker) · [olmOCR 2](https://huggingface.co/allenai/olmOCR-2-7B-1025) · [dots.mocr](https://github.com/rednote-hilab/dots.mocr) · [PaddleOCR-VL on Apple Silicon](https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/pipeline_usage/PaddleOCR-VL-Apple-Silicon.en.md) · [MinerU](https://github.com/opendatalab/MinerU) · [GLM-OCR](https://github.com/zai-org/GLM-OCR) · [DeepSeek-OCR 2](https://github.com/deepseek-ai/DeepSeek-OCR-2) · [HunyuanOCR](https://github.com/Tencent-Hunyuan/HunyuanOCR) · [LightOnOCR-2](https://huggingface.co/lightonai/LightOnOCR-2-1B)

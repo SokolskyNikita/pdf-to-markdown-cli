@@ -2,7 +2,7 @@
 
 op rekende dat myn naam abonnés geven zou. Nu, nu jy in nood zit, schynt hy dat geheel vergeten te hebben, en stelt voor jou dat kamertje te laten, mits ik artikels geve. Tegelykertyd evenwel, verhaalt hy my, als een echte smous, dat de verkoop myner werken zoo aan 't kwynen is. Dit om myn waar te declineren. Hy erkent echter dat artikels van myn hand de verkoop van z'n Omnibus »bevorderen« zou. Ja, dat geloof ik graag.
 
-Nu, wat te doen! Natuurlyk zou ik alles doen om je in 't bezit van dat verblyfje te laten, maar dat zal niet kunnen helpen, denk ik, als hy myn bydragen berekent naar kopyprys van een boek à tant par feuille! Want een krantartikel beslaat niet veel.
+Nu, wat te doen! Natuurlijk zou ik alles doen om je in 't bezit van dat verblyfje te laten, maar dat zal niet kunnen helpen, denk ik, als hy myn bydragen berekent naar kopyprys van een boek à tant par feuille! Want een krantartikel beslaat niet veel.
 
 Gister na 't krygen van dien brief ging ik naar Wiesbaden in de hoop je fl. 25 te kunnen zenden. Dan had ik je gevraagd om te verhuizen, maar dat is ook weer mis geloopen. En nu mag ik aan d'Ablaing zelfs niet laten voelen hoe ik zyn voorstel opneem, want dan sta jy op straat. Houd jy je ook goed en laat er niets van merken, althans voor wy raad weten. Ik moest je evenwel dit alles schryven als ik dan weet waar je heen kan en ik schryf 't je dan weet je meteen waarom je van d'Ablaing weg moet.
 
@@ -24,13 +24,13 @@ Le monde est comme les enfants qui aiment à voir voler les oiseaux, mais qui le
 
 ### III.
 
-Vrydagmorgen.
+#### Vrydagmorgen.
 
-Lieve beste Tine. Ja, zeker ben je dapper. Ik heb je brief van dingsdag van Parys. Nu moet ik je zeggen dat ik in erge ongerustheid zat (en nog) over je geld. Ik begreep dat je in Amsterdam nog uitgaven gehad had, en ook zonder dat, het meegaan van Edu zal uit je gis geloopen zyn. Ik ben angstig nieuwsgierig hoe je 't gemaakt hebt. Ik weet natuurlyk dat snel doorreizen zeer vermoeyend is, maar daar tegenover staat de duurte
+Lieve beste Tine. Ja, zeker ben je dapper. Ik heb je brief van dingsdag van Parys. Nu moet ik je zeggen dat ik in erge ongerustheid zat (en nog) over je geld. Ik begreep dat je in Amsterdam nog uitgaven gehad had, en ook zonder dat, het meegaan van Edu zal uit je gis geloopen zyn. Ik ben angstig nieuwsgierig hoe je 't gemaakt hebt. Ik weet natuurlijk dat snel doorreizen zeer vermoeyend is, maar daar tegenover staat de duurte
 
 {3}------------------------------------------------
 
-moet leiden. Als je met de geometrische reeks op eenige kans speelt, 1, 2, 4, 8, 16, 32, 64 enz. dan is 't wel waar dat je met elken gehaalden zet al de voorafgaande verliezen doodt plus één winst, maar al by den 13den zet ben je 't maximum van de bank te boven en hoe dikwyls waren er niet serien van 20, 24 en zelfs meer. Al hadden we dus geld genoeg voor deze methode dan zou 't onpraktisch zyn haar toe te passen, daar het door de bank gestelde maximum belet ze vol te houden. Ook de arithmetische reeks, telkens één opgaande by verlies, één dalende by winst, past niet voor ons, noch eigenlijk voor iemand. Want al zouden we niet, zooals by de geometrische reeks springen by een serie van 13 verliezers, we liepen de kans van veelgrooter afwykingen en konden al spelende reeksen van één tot 40 of 60 ten achter geraken.
+moet leiden. Als je met de geometrische reeks op eenige kans speelt, 1, 2, 4, 8, 16, 32, 64 enz. dan is 't wel waar dat je met elken gehaalden zet al de voorafgaande verliezen doodt plus één winst, maar al by den 13<sup>den</sup> zet ben je 't maximum van de bank te boven en hoe dikwyls waren er niet serien van 20, 24 en zelfs meer. Al hadden we dus geld genoeg voor deze methode dan zou 't onpraktisch zyn haar toe te passen, daar het door de bank gestelde maximum belet ze vol te houden. Ook de arithmetische reeks, telkens één opgaande by verlies, één dalende by winst, past niet voor ons, noch eigenlyk voor iemand. Want al zouden we niet, zooals by de geometrische reeks springen by een serie van 13 verliezers, we liepen de kans van veel grooter afwykingen en konden al spelende reeksen van één tot 40 of 60 ten achter geraken.
 
 By beide deze wyzen van spelen zouden we als we de methode konden volhouden, een halve mise per zet winnen. (Men zie hierover Millioenen-Studien, hoofdstuk: Systemen). Het spreekt van zelf dat we met veel kleiner winst tevreden zouden zyn, als we daar tegenover dan ook gewapend waren tegen de afwykingen van de gelykheid die niet kunnen uitblyven. Daarom heb ik er nu iets anders op bedacht.
 
@@ -46,9 +46,7 @@ Heb je daarentegen 4 keer 2 verloren dan zeg je: halt nu met het spelen van 2. E
 
 elke groep van 3 eenheden te dooden door 2 tweetallen,
 
-» » » 4 tweetallen » » » 3 drietallen,  
- » » » 5 drietallen » » » 4 viertallen,  
- » » » 6 viertallen » » » 5 vyftallen,
+› › › 4 tweetallen › › › 3 drietallen, › › › 5 drietallen › › › 4 viertallen, › › › 6 viertallen › › › 5 vyftallen,
 
 enz. enz. Zoodoende win je op elke groep een mise, en je moet ten slotte bykomen, daar je elke groep inhaalt met een zet minder dan het aantal zetten der verloren equivaleerende groep. Heb je vyf vyftallen gewonnen dan speel je vier. Verlies je zes vieren, dan zyn de vyven weer aan de beurt, maar win je vier maal vier, dan ga je terug tot de drieën en de tweeën, en je bent by, voor dat het aantal der winnende zetten gelyk is aan dat der verliezende.
 

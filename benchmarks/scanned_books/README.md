@@ -42,7 +42,7 @@ The scorer reports:
 
 ## Baselines
 
-`baselines/<backend>-<mode>/` holds output made on 30 September 2026 with each backend's default settings, and `-split-spreads` folders the same settings with `--split-spreads`. `tests/test_benchmark.py` checks that the scorer still gives them these scores.
+`baselines/<backend>-<mode>/` holds output made on 30 September 2026 (Mistral on 11 October) with each backend's default settings, and `-split-spreads` folders the same settings with `--split-spreads`. `tests/test_benchmark.py` checks that the scorer still gives them these scores.
 
 | Setting | Accuracy | Spelling | Order | Footnotes (of 47) | $ for 16 pages |
 | --- | --- | --- | --- | --- | --- |
@@ -51,10 +51,10 @@ The scorer reports:
 | Datalab `fast` | 98.81% | 18/42 | 7/8 | 47 | 0.048 |
 | GPT-6 Luna `accurate` | 98.42% | 22/42 | 6/8 | 43 | 0.026 |
 | GPT-6 Luna `fast` | 98.38% | **26/42** | 3/8 | 47 | 0.013 |
-| Mistral OCR 4.0 | 97.93% | 18/42 | 3/8 | 47 | 0.064 |
+| Mistral OCR 4.1 | 98.13% | 23/42 | 3/8 | 47 | 0.064 |
 | GPT-6 Luna `balanced` | 94.79% | 23/42 | 4/8 | 45 | 0.016 |
 | GPT-6 Luna `balanced` via OpenRouter | 94.06% | 21/42 | 4/8 | 45 | same rates as OpenAI |
-| Mistral OCR 4.0, `--split-spreads` | 99.07% | 22/42 | 8/8 | 47 | 0.096 |
+| Mistral OCR 4.1, `--split-spreads` | 98.86% | 24/42 | 8/8 | 47 | 0.096 |
 | GPT-6 Luna `fast`, `--split-spreads` | 98.82% | 26/42 | 8/8 | 47 | 0.011 |
 | GPT-6 Luna `balanced`, `--split-spreads` | 98.78% | 26/42 | 8/8 | 47 | 0.016 |
 | GPT-6 Luna `balanced` via OpenRouter, `--split-spreads` | 98.76% | 27/42 | 8/8 | 47 | 0.017 |

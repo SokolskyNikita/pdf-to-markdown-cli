@@ -168,7 +168,7 @@ Throughput depends on your plan's limits. With the default of 5 concurrent reque
 
 Mistral accepts `.pdf`, `.doc`, `.docx`, `.odt`, `.ppt`, `.pptx`, `.xlsx`, `.csv`, and `.png` `.jpg` `.jpeg` `.webp` `.gif` `.tif` `.tiff` `.bmp` `.avif` `.heic` images, up to 50 MB and 1,000 pages per request. `--page-range` and `--max-pages` work for Office files too.
 
-The default model is `mistral-ocr-4-0` (OCR 4.0). In September 2026 tests it found every sample's required words and read the dense 1980 census table cell for cell. It converted all 25 sample pages in 13 seconds for 10¢. OCR 4.1 (`--model mistral-ocr-latest`) did no better on our samples and writes math as `\( \)` instead of `$`. OCR 3 (`--model mistral-ocr-2512`) costs half as much but read the tables and the Chinese sample much worse. Mistral's weak spot is faded scans full of numbers: on the 1880 census microfiche it misread 6 of the 16 hard cells we checked, all of which GPT-Luna and Datalab's `accurate` mode got right.
+The default model is `mistral-ocr-latest`, Mistral's newest OCR model (OCR 4.1 as of October 2026). In October 2026 tests it found every sample's required words and read 14 of the 15 hard cells in the dense 1980 census table. It converted all 25 sample pages in 11 seconds for 10¢. It writes math as `\( \)` instead of `$`. Pass `--model mistral-ocr-4-1` to pin the version. OCR 3 (`--model mistral-ocr-2512`) costs half as much but read the tables and the Chinese sample much worse. Mistral's weak spot is faded scans full of numbers: on the 1880 census microfiche it got 7 of the 16 hard cells we checked wrong, all of which GPT-Luna and Datalab's `accurate` mode got right.
 
 For scans of two facing book pages, `--split-spreads` sends each half as a page of its own, which puts each page's footnotes in the right place (see [GPT-Luna](#transcribing-with-gpt-luna) below). Mistral bills each half as a page.
 
@@ -247,7 +247,7 @@ pdf-to-md INPUT [INPUT ...] [options]
 | --- | --- |
 | `--backend NAME` | `datalab` (default), `mistral`, `openai`, or `openrouter`. |
 | `-m`, `--mode MODE` | `fast`, `balanced`, or `accurate`. Defaults to `fast` on Datalab and `balanced` on GPT-Luna. Mistral has no modes. |
-| `--model NAME` | Mistral and GPT-Luna only. Defaults: `mistral-ocr-4-0` and `gpt-6-luna`. |
+| `--model NAME` | Mistral and GPT-Luna only. Defaults: `mistral-ocr-latest` and `gpt-6-luna`. |
 | `--paginate` | Insert page separators, numbered from 0 by PDF page. |
 | `--split-spreads` | Mistral and GPT-Luna. Send each half of a landscape PDF page (a scan of two facing pages) as its own page, then join them. Mistral bills each half as a page. |
 | `--no-images` | Don't extract images. |
